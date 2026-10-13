@@ -1,0 +1,34 @@
+schema: closure/0.1
+module: power
+name: Electrical power
+owner: Power engineering
+color: '#42cdb2'
+
+parameters:
+  bus_draw:
+    value: 10
+    unit: W
+    origin: assumption
+    rationale: Constant housekeeping load
+  usable_energy:
+    value: 40
+    unit: Wh
+    origin: assumption
+    rationale: Assumed available energy after all battery derating
+
+analyses:
+  energy:
+    description: Eclipse demand and remaining usable energy; no charging or thermal model.
+    run:
+      argv: [python, analysis/energy.py]
+      sources: [analysis/energy.py]
+    inputs:
+      eclipse: {ref: orbit.propagate.max_eclipse, unit: s}
+      payload: {ref: payload.draw, unit: W}
+      bus: {ref: power.bus_draw, unit: W}
+      usable: {ref: power.usable_energy, unit: Wh}
+    outputs:
+      demand: {unit: Wh}
+      reserve: {unit: percent}
+
+exports: [energy.demand, energy.reserve]

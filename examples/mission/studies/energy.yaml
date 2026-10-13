@@ -1,0 +1,15 @@
+schema: closure/0.1
+study: eclipse-energy
+
+scenarios: [nominal]
+
+configurations: [standard]
+
+grid:
+  payload.draw:
+    - {value: 20, unit: W}
+    - {value: 40, unit: W}
+    - {value: 70, unit: W}
+  power.usable_energy:
+    - {value: 40, unit: Wh}
+    - {value: 80, unit: Wh}

@@ -1,0 +1,54 @@
+schema: closure/0.1
+module: refill
+name: Ink & refill
+owner: Writing systems
+color: '#eab86a'
+description: Purchased cartridge envelope; supplier dimensions remain a procurement check.
+
+parameters:
+  length:
+    value: 98.1
+    description: Provisional purchased refill length
+    unit: mm
+    origin: assumption
+    rationale: Provisional purchased refill length
+  diameter:
+    value: 5.8
+    description: Cartridge body envelope
+    unit: mm
+    origin: assumption
+    rationale: Cartridge body envelope
+  stem:
+    value: 2.3
+    description: Front stem envelope
+    unit: mm
+    origin: assumption
+    rationale: Front stem envelope
+  shoulder:
+    value: 27
+    description: Tip-to-body shoulder distance; confirm with selected refill
+    unit: mm
+    origin: assumption
+    rationale: Tip-to-body shoulder distance; confirm with selected refill
+  mass:
+    value: 3
+    description: Purchased filled cartridge mass assumption
+    unit: g
+    origin: assumption
+    rationale: Purchased filled cartridge mass assumption
+  retracted_gap: {value: 1.5, unit: mm}
+  axial_stack_tolerance:
+    value: 0.25
+    description: Combined cartridge and housing axial tolerance
+    unit: mm
+    origin: assumption
+    rationale: Combined cartridge and housing axial tolerance
+
+exports:
+  - length
+  - diameter
+  - stem
+  - shoulder
+  - mass
+  - retracted_gap
+  - axial_stack_tolerance

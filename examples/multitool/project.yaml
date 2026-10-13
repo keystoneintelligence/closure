@@ -1,0 +1,11 @@
+schema: closure/0.1
+project: blender-openfoam
+name: Cavity / connected tools
+description: A real Blender file supplies geometry to Python and an OpenFOAM transient flow case.
+modules: [model/*.yaml]
+
+policy:
+  name: integration-demonstration
+  accepted_evidence: [assumed, predicted]
+  description: Checks tool-chain execution and declared numerical criteria; no steady-state or 
+    physical validation claim.

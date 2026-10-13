@@ -1,0 +1,87 @@
+schema: closure/0.1
+module: fluid
+name: OpenFOAM simulation
+owner: CFD team
+color: '#e39c52'
+
+analyses:
+  cavity:
+    description: Execute blockMesh, checkMesh and icoFoam in WSL, with geometry bound from Blender.
+    run:
+      argv: [python, analysis/openfoam_driver.py]
+      sources:
+        - analysis/openfoam_driver.py
+        - analysis/openfoam_worker.py
+        - analysis/openfoam_environment.sh
+        - case/
+      tools:
+        wsl: wsl.exe
+      timeout: 240
+      max_output_bytes: 2000000
+      uncontrolled_dependencies:
+        - WSL distribution and OpenFOAM shared libraries are not isolated; tool hashes are recorded 
+          at execution and reuse is disabled.
+    solver: true
+    settings:
+      distribution: Ubuntu
+    inputs:
+      length: {ref: geometry.export.length, unit: m}
+      height: {ref: geometry.export.height, unit: m}
+      depth: {ref: geometry.export.depth, unit: m}
+      lid_speed: {ref: physics.lid_speed, unit: m/s}
+      viscosity: {ref: physics.viscosity, unit: m^2/s}
+      end_time: {ref: physics.end_time, unit: s}
+      time_step: {ref: physics.time_step, unit: s}
+    outputs:
+      mesh_valid: {type: boolean}
+      cells: {type: scalar}
+      final_time: {unit: s}
+      max_courant: {type: scalar}
+      continuity_error: {type: scalar}
+      max_velocity: {unit: m/s}
+      recirculating_cells: {type: scalar}
+      diagnostics: {type: artifact}
+      case: {type: artifact}
+
+requirements:
+  CFD-001:
+    text: OpenFOAM mesh quality checks shall pass.
+    verify:
+      actual: {ref: fluid.cavity.mesh_valid}
+      op: eq
+      limit: {value: true}
+  CFD-002:
+    text: Maximum Courant number shall stay below 0.5.
+    verify:
+      actual: {ref: fluid.cavity.max_courant}
+      op: lte
+      limit: {value: 0.5}
+  CFD-003:
+    text: Absolute cumulative continuity error shall not exceed 1e-6.
+    verify:
+      actual: {ref: fluid.cavity.continuity_error}
+      op: lte
+      limit: {value: 1e-06}
+  CFD-004:
+    text: Solver shall reach the requested transient duration.
+    verify:
+      actual: {ref: fluid.cavity.final_time}
+      op: gte
+      limit: {ref: physics.end_time}
+  CFD-005:
+    text: The cavity shall contain recirculating internal flow cells.
+    verify:
+      actual: {ref: fluid.cavity.recirculating_cells}
+      op: gt
+      limit: {value: 0}
+
+exports:
+  - cavity.mesh_valid
+  - cavity.cells
+  - cavity.final_time
+  - cavity.max_courant
+  - cavity.continuity_error
+  - cavity.max_velocity
+  - cavity.recirculating_cells
+  - cavity.diagnostics
+  - cavity.case

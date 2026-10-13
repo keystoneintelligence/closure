@@ -1,0 +1,12 @@
+schema: closure/0.1
+study: payload-power
+
+scenarios: [nominal]
+
+grid:
+  payload.peak_power:
+    - {value: 80, unit: W}
+    - {value: 120, unit: W}
+  power.base_load:
+    - {value: 90, unit: W}
+    - {value: 100, unit: W}

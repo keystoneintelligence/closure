@@ -1,0 +1,125 @@
+{
+  "description": "Observed fresh preview installations, not universal lock files. Dependency versions can differ by supported Python/platform.",
+  "environments": {
+    "windows": {
+      "python": "3.10.11 (tags/v3.10.11:7d4cc5a, Apr  5 2023, 00:38:17) [MSC v.1929 64 bit (AMD64)]",
+      "wheel_sha256": "e50e904931a4cc68c51835b45e1c1cfed9699282e5cba238680b4015544e8802",
+      "dependencies": [
+        {
+          "name": "annotated-types",
+          "version": "0.8.0"
+        },
+        {
+          "name": "closure-se",
+          "version": "0.1.0a1"
+        },
+        {
+          "name": "flexcache",
+          "version": "0.3"
+        },
+        {
+          "name": "flexparser",
+          "version": "0.4"
+        },
+        {
+          "name": "Pint",
+          "version": "0.24.4"
+        },
+        {
+          "name": "pip",
+          "version": "23.0.1"
+        },
+        {
+          "name": "platformdirs",
+          "version": "4.12.4"
+        },
+        {
+          "name": "pydantic",
+          "version": "2.14.1"
+        },
+        {
+          "name": "pydantic_core",
+          "version": "2.50.1"
+        },
+        {
+          "name": "ruamel.yaml",
+          "version": "0.18.17"
+        },
+        {
+          "name": "ruamel.yaml.clib",
+          "version": "0.2.15"
+        },
+        {
+          "name": "setuptools",
+          "version": "65.5.0"
+        },
+        {
+          "name": "typing_extensions",
+          "version": "4.16.0"
+        },
+        {
+          "name": "typing-inspection",
+          "version": "0.4.4"
+        }
+      ]
+    },
+    "linux": {
+      "python": "3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]",
+      "wheel_sha256": "e50e904931a4cc68c51835b45e1c1cfed9699282e5cba238680b4015544e8802",
+      "dependencies": [
+        {
+          "name": "annotated-types",
+          "version": "0.8.0"
+        },
+        {
+          "name": "closure-se",
+          "version": "0.1.0a1"
+        },
+        {
+          "name": "flexcache",
+          "version": "0.3"
+        },
+        {
+          "name": "flexparser",
+          "version": "0.4"
+        },
+        {
+          "name": "Pint",
+          "version": "0.25.3"
+        },
+        {
+          "name": "pip",
+          "version": "26.2.1"
+        },
+        {
+          "name": "platformdirs",
+          "version": "4.13.0"
+        },
+        {
+          "name": "pydantic",
+          "version": "2.14.1"
+        },
+        {
+          "name": "pydantic_core",
+          "version": "2.50.1"
+        },
+        {
+          "name": "ruamel.yaml",
+          "version": "0.18.17"
+        },
+        {
+          "name": "ruamel.yaml.clib",
+          "version": "0.2.15"
+        },
+        {
+          "name": "typing_extensions",
+          "version": "4.16.0"
+        },
+        {
+          "name": "typing-inspection",
+          "version": "0.4.4"
+        }
+      ]
+    }
+  }
+}

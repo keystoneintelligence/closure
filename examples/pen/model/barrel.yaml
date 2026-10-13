@@ -1,0 +1,102 @@
+schema: closure/0.1
+module: barrel
+name: Barrel & housing
+owner: Mechanical structures
+color: '#45a7c4'
+description: Turned aluminum housing and its elastic structural checks.
+
+parameters:
+  diameter: {value: 12, unit: mm}
+  wall: {value: 0.8, unit: mm}
+  length: {value: 106, unit: mm}
+  nose_length: {value: 18, unit: mm}
+  nose_tip_diameter: {value: 4.8, unit: mm}
+  tip_bore: {value: 2.7, unit: mm}
+  spring_cavity: {value: 7.6, unit: mm}
+  thread_engagement:
+    value: 5.5
+    description: Threaded joint axial engagement; CAD uses cosmetic envelopes
+    unit: mm
+  cap_length: {value: 10, unit: mm}
+  joint_radial_clearance:
+    value: 0.05
+    unit: mm
+    description: Radial fit allowance for the nose and cap spigots.
+  cap_spigot_length:
+    value: 2
+    unit: mm
+    description: Cap engagement also locates the top of the retained cam sleeve.
+  button_radial_clearance:
+    value: 0.15
+    unit: mm
+    description: Radial clearance around the button shaft and head in the cap.
+  cap_register_lip:
+    value: 0.1
+    unit: mm
+    description: Radial retaining lip left by the sleeve-register counterbore.
+  capture_shoulder_thickness:
+    value: 0.6
+    unit: mm
+    description: Axial thickness of the barrel shoulder below the sleeve collar.
+
+analyses:
+  strength:
+    description: Simply supported 30 N bending case with conservative additive axial stress.
+    run:
+      argv: [python, analysis/barrel.py]
+      sources: [analysis/barrel.py]
+      timeout: 240
+    inputs:
+      diameter: {ref: barrel.diameter, unit: mm}
+      wall: {ref: barrel.wall, unit: mm}
+      length: {ref: barrel.length, unit: mm}
+      span: {ref: product.bending_span, unit: mm}
+      bending_load: {ref: product.bending_load, unit: N}
+      axial_load: {ref: product.axial_load, unit: N}
+      yield_strength: {ref: materials.aluminum_yield, unit: MPa}
+      modulus: {ref: materials.aluminum_modulus, unit: MPa}
+    outputs:
+      inner_diameter: {unit: mm}
+      area: {unit: mm^2}
+      inertia: {unit: mm^4}
+      stress: {unit: MPa}
+      deflection: {unit: mm}
+      safety_factor: {type: scalar}
+      volume: {unit: mm^3}
+
+requirements:
+  STR-001:
+    text: Barrel yield safety factor shall be at least 3 under the declared loads.
+    verify:
+      actual: {ref: barrel.strength.safety_factor}
+      op: gte
+      limit: {value: 3}
+  STR-002:
+    text: Midspan elastic deflection shall be no more than 0.5 mm.
+    verify:
+      actual: {ref: barrel.strength.deflection}
+      op: lte
+      limit: {value: 0.5, unit: mm}
+
+exports:
+  - diameter
+  - wall
+  - length
+  - nose_length
+  - nose_tip_diameter
+  - tip_bore
+  - spring_cavity
+  - thread_engagement
+  - cap_length
+  - strength.inner_diameter
+  - strength.area
+  - strength.inertia
+  - strength.stress
+  - strength.deflection
+  - strength.safety_factor
+  - strength.volume
+  - joint_radial_clearance
+  - cap_spigot_length
+  - button_radial_clearance
+  - cap_register_lip
+  - capture_shoulder_thickness

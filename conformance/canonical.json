@@ -1,0 +1,56 @@
+[
+  {
+    "name": "numeric kinds",
+    "input": "{\"z\":-0.0,\"b\":1.0,\"a\":1}",
+    "canonical": "{\"a\":1,\"b\":1.0,\"z\":-0.0}",
+    "sha256": "9d5b3ae5febfc9fcb812775412e345aff50ac9593a846d956ee3501c10d6ec02"
+  },
+  {
+    "name": "unicode",
+    "input": "{\"雪\":\"é\",\"a\":\"水\"}",
+    "canonical": "{\"a\":\"水\",\"雪\":\"é\"}",
+    "sha256": "d9588f020fe4d623802abf8978683652fb2d043357358c10360e02a9d9170e4d"
+  },
+  {
+    "name": "small exponent",
+    "input": "{\"small\":1e-7}",
+    "canonical": "{\"small\":1e-07}",
+    "sha256": "f77ffcfd9a9d8a01bd70c12335eadeed3ac77dce609a5c47cc383579ab933942"
+  },
+  {
+    "name": "positive exponent",
+    "input": "{\"x\":1e20}",
+    "canonical": "{\"x\":1e+20}",
+    "sha256": "9528c74921c4a320e27a42b39aa2563b2ea45c20d33cf51188501632e1768a22"
+  },
+  {
+    "name": "fixed float",
+    "input": "{\"x\":1e15}",
+    "canonical": "{\"x\":1000000000000000.0}",
+    "sha256": "956f5c22d16816977a4bc776eb49d24ccced0468549838f68c8174d67fa9c26d"
+  },
+  {
+    "name": "booleans null controls",
+    "input": "{\"truth\":true,\"nil\":null,\"lines\":\"a\\nb\"}",
+    "canonical": "{\"lines\":\"a\\nb\",\"nil\":null,\"truth\":true}",
+    "sha256": "9bff623169388159c4f9a56524287a2ac6254a0bb4b7f744bd9c11825c09ab21"
+  },
+  {
+    "name": "large integer",
+    "input": "{\"n\":9007199254740993}",
+    "canonical": "{\"n\":9007199254740993}",
+    "sha256": "4ac8309cc76123ef6c5325ef925fc873e9b5856ec4f844ef1462f9303960378a"
+  },
+  {
+    "name": "nested arrays",
+    "input": "{\"b\":[1,1.0,-0.0],\"a\":{}}",
+    "canonical": "{\"a\":{},\"b\":[1,1.0,-0.0]}",
+    "sha256": "2c75c3e0b1e3ac4ba08d97ec5c90c4e7e65db165909f61dbe8537d4caed7b907"
+  },
+  {
+    "name": "unicode key order",
+    "input": "{\"😀\":1,\"\":2}",
+    "canonical": "{\"\":2,\"😀\":1}",
+    "sha256": "cddbdeacace14eb6923e88dfafb2a3e7df21ec908682f50a886b7b9567692d02"
+  }
+]

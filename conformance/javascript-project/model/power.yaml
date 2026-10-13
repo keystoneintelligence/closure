@@ -1,0 +1,27 @@
+schema: closure/0.1
+module: power
+owner: Example engineering team
+
+parameters:
+  load: {value: 80, unit: W, rationale: Illustrative payload demand}
+  base: {value: 100, unit: W, rationale: Illustrative platform demand}
+  allocation: {value: 200, unit: W, rationale: Reviewed example power allocation}
+
+analyses:
+  budget:
+    run:
+      argv: [node, analysis/budget.mjs]
+      sources: [analysis/budget.mjs]
+    inputs:
+      load: {ref: power.load, unit: W}
+      base: {ref: power.base, unit: W}
+    outputs:
+      total: {unit: W}
+
+requirements:
+  PWR-001:
+    text: Combined demand shall remain within the allocated power.
+    verify:
+      actual: {ref: power.budget.total}
+      op: lte
+      limit: {ref: power.allocation}

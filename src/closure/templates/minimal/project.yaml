@@ -1,0 +1,10 @@
+schema: closure/0.1
+project: engineering-project
+name: My engineering project
+description: Replace the starter contract, analysis and criterion with your engineering model.
+modules: [model/*.yaml]
+
+policy:
+  name: development
+  description: Illustrative local workflow. Replace the example criterion and review the intended 
+    scope.

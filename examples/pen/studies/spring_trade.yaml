@@ -1,0 +1,11 @@
+schema: closure/0.1
+study: spring-wire-trade
+
+grid:
+  spring.wire:
+    - {value: 0.4, unit: mm}
+    - {value: 0.45, unit: mm}
+    - {value: 0.55, unit: mm}
+  mechanism.friction_coefficient:
+    - {value: 0.1}
+    - {value: 0.25}

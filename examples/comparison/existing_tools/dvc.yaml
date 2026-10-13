@@ -1,0 +1,14 @@
+stages:
+  power:
+    cmd: python analysis.py
+    deps:
+      - analysis.py
+    params:
+      - params.json:
+          - payload_w
+          - base_w
+      - requirements/PWR001.yml:
+          - limit_w
+    metrics:
+      - metrics.json:
+          cache: false

@@ -1,0 +1,14 @@
+schema: closure/0.1
+module: payload
+name: Payload
+owner: Payload team
+color: '#a78bfa'
+
+parameters:
+  peak_power:
+    value: 80
+    unit: W
+    origin: assumption
+    rationale: Preliminary payload load allocation.
+
+exports: [peak_power]

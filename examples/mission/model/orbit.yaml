@@ -1,0 +1,31 @@
+schema: closure/0.1
+module: orbit
+name: Orbit dynamics
+owner: Flight dynamics
+color: '#77a9ff'
+
+parameters:
+  mean_motion:
+    value: 15.2
+    unit: 1/day
+    origin: assumption
+    rationale: Synthetic near-circular low Earth orbit
+  inclination: {value: 51.6, unit: degree}
+  eccentricity: {value: 0.001}
+
+analyses:
+  propagate:
+    description: Existing SGP4 propagator and sampled cylindrical Earth-shadow calculation.
+    run:
+      argv: [python, analysis/orbit.py]
+      sources: [analysis/orbit.py]
+    inputs:
+      mean_motion: {ref: orbit.mean_motion, unit: 1/day}
+      inclination: {ref: orbit.inclination, unit: degree}
+      eccentricity: {ref: orbit.eccentricity}
+    outputs:
+      max_eclipse: {unit: s}
+      min_altitude: {unit: km}
+      trajectory: {type: artifact, qualifiers: {frame: TEME}}
+
+exports: [propagate.max_eclipse, propagate.min_altitude, propagate.trajectory]

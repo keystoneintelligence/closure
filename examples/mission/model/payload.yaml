@@ -1,0 +1,14 @@
+schema: closure/0.1
+module: payload
+name: Payload operation
+owner: Payload engineering
+color: '#b78ae7'
+
+parameters:
+  draw:
+    value: 20
+    unit: W
+    origin: assumption
+    rationale: Constant payload load throughout eclipse
+
+exports: [draw]

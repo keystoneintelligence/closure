@@ -1,0 +1,7 @@
+L 0.1;
+H 0.1;
+D 0.01;
+lidVelocity (1 0 0);
+kinematicViscosity 0.001;
+endTimeValue 1;
+deltaTValue 0.002;

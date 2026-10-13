@@ -1,0 +1,49 @@
+schema: closure/0.1
+module: verification
+name: Verification & acceptance
+owner: Systems verification
+color: '#a4b6c9'
+description: Records concept closure and the physical validation still required before manufacture.
+
+requirements:
+  SYS-001:
+    text: The integrated digital design shall meet CAD, force, mass, travel, and structural criteria
+      together.
+    verify:
+      all_of:
+        - actual: {ref: manufacturing.cad.valid}
+          op: eq
+          limit: {value: true}
+        - actual: {ref: manufacturing.materials.mass}
+          op: lte
+          limit: {ref: product.max_mass}
+        - actual: {ref: barrel.strength.safety_factor}
+          op: gte
+          limit: {value: 3}
+        - actual: {ref: spring.response.safety_factor}
+          op: gte
+          limit: {value: 1.5}
+        - actual: {ref: mechanism.kinematics.push_force}
+          op: lte
+          limit: {ref: product.max_force}
+        - actual: {ref: mechanism.kinematics.cycle_valid}
+          op: eq
+          limit: {value: true}
+        - actual: {ref: manufacturing.contacts.valid}
+          op: eq
+          limit: {value: true}
+  TEST-001:
+    text: Prototype shall pass 10,000 physical click cycles without jamming or unintended release.
+    method: test
+    required: false
+    review_required: true
+  TEST-002:
+    text: Manufactured pen shall pass the specified bending, writing and drop tests.
+    method: test
+    required: false
+    review_required: true
+  TEST-003:
+    text: Purchased refill, spring and manufactured interfaces shall pass dimensional inspection.
+    method: inspection
+    required: false
+    review_required: true

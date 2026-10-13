@@ -1,0 +1,15 @@
+schema: closure/0.1
+project: power-demo
+name: Power budget demonstrator
+description: Two independent teams share a payload power allocation and verify the system budget.
+modules: [model/*.yaml]
+
+scenarios:
+  nominal: {}
+
+configurations:
+  default: {}
+
+policy:
+  name: concept
+  accepted_evidence: [assumed, predicted]

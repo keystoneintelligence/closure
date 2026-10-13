@@ -1,0 +1,121 @@
+schema: closure/0.1
+module: spring
+name: Return spring
+owner: Spring engineering
+color: '#e694bb'
+description: Guided compression spring, tolerance envelope and fatigue screening.
+
+parameters:
+  wire: {value: 0.45, unit: mm}
+  mean_diameter: {value: 6.6, unit: mm}
+  active_coils: {value: 7}
+  free_length: {value: 18, unit: mm}
+  installed_length: {value: 15, unit: mm}
+  rate_tolerance:
+    value: 0.1
+    description: Relative spring-rate envelope
+    unit: dimensionless
+    origin: assumption
+    rationale: Relative spring-rate envelope
+  length_tolerance: {value: 0.1, unit: mm, origin: assumption}
+  wire_tolerance: {value: 0.01, unit: mm, origin: assumption}
+  diameter_tolerance: {value: 0.05, unit: mm, origin: assumption}
+  inactive_coils:
+    value: 2
+    description: Total closed end turns, shared by stress/volume screening and CAD.
+  solid_height_factor:
+    value: 1.05
+    origin: assumption
+    rationale: Five-percent solid-height allowance for imperfectly closed coils.
+  end_pitch_factor:
+    value: 1.05
+    origin: assumption
+    rationale: End-turn centerline pitch relative to wire diameter in the CAD envelope.
+
+analyses:
+  response:
+    description: Linear helical spring with Wahl correction, tolerances and an assumed Goodman 
+      fatigue envelope.
+    run:
+      argv: [python, analysis/spring.py]
+      sources: [analysis/spring.py]
+      timeout: 240
+    inputs:
+      wire: {ref: spring.wire, unit: mm}
+      mean_diameter: {ref: spring.mean_diameter, unit: mm}
+      active_coils: {ref: spring.active_coils}
+      free_length: {ref: spring.free_length, unit: mm}
+      installed_length: {ref: spring.installed_length, unit: mm}
+      rate_tolerance: {ref: spring.rate_tolerance}
+      length_tolerance: {ref: spring.length_tolerance, unit: mm}
+      wire_tolerance: {ref: spring.wire_tolerance, unit: mm}
+      diameter_tolerance: {ref: spring.diameter_tolerance, unit: mm}
+      stroke: {ref: mechanism.motion.max_rotor_stroke, unit: mm}
+      shear_modulus: {ref: materials.steel_shear_modulus, unit: MPa}
+      shear_allowable: {ref: materials.spring_shear_allowable, unit: MPa}
+      alternating_allowable: {ref: materials.spring_alternating, unit: MPa}
+      mean_allowable: {ref: materials.spring_mean, unit: MPa}
+      inactive_coils: {ref: spring.inactive_coils}
+      solid_height_factor: {ref: spring.solid_height_factor}
+    outputs:
+      rate: {unit: N/mm}
+      preload_force: {unit: N}
+      peak_force: {unit: N}
+      worst_force: {unit: N}
+      shear_stress: {unit: MPa}
+      safety_factor: {type: scalar}
+      fatigue_factor: {type: scalar}
+      solid_clearance: {unit: mm}
+      solid_height: {unit: mm}
+      outer_diameter: {unit: mm}
+      inner_diameter: {unit: mm}
+      volume: {unit: mm^3}
+      curve: {type: artifact}
+    settings:
+      curve_intervals: 20
+
+requirements:
+  SPR-001:
+    text: Worst-case elastic shear safety factor shall be at least 1.5.
+    verify:
+      actual: {ref: spring.response.safety_factor}
+      op: gte
+      limit: {value: 1.5}
+  SPR-002:
+    text: Full press shall retain at least 1 mm clearance above worst-case solid height.
+    verify:
+      actual: {ref: spring.response.solid_clearance}
+      op: gte
+      limit: {value: 1, unit: mm}
+  SPR-003:
+    text: Assumed fatigue-screening factor shall be at least 1.5.
+    verify:
+      actual: {ref: spring.response.fatigue_factor}
+      op: gte
+      limit: {value: 1.5}
+
+exports:
+  - wire
+  - mean_diameter
+  - active_coils
+  - free_length
+  - installed_length
+  - rate_tolerance
+  - length_tolerance
+  - wire_tolerance
+  - diameter_tolerance
+  - response.rate
+  - response.preload_force
+  - response.peak_force
+  - response.worst_force
+  - response.shear_stress
+  - response.safety_factor
+  - response.fatigue_factor
+  - response.solid_clearance
+  - response.solid_height
+  - response.outer_diameter
+  - response.inner_diameter
+  - response.volume
+  - response.curve
+  - inactive_coils
+  - end_pitch_factor

@@ -1,0 +1,3 @@
+# Closure hashes source bytes. Preserve the reviewed bytes across platforms,
+# including the immutable historical RFC and purpose documents.
+* -text

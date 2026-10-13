@@ -1,0 +1,29 @@
+schema: closure/0.1
+module: operations
+name: Mission operations
+owner: Mission assurance
+color: '#efac69'
+
+parameters:
+  minimum_altitude: {value: 400, unit: km}
+  minimum_reserve: {value: 20, unit: percent}
+
+requirements:
+  ORB-001:
+    text: The sampled trajectory shall remain above the preliminary altitude floor during the 
+      six-hour window.
+    applies_to: [nominal, high_load]
+    configurations: [standard, extended]
+    verify:
+      actual: {ref: orbit.propagate.min_altitude}
+      op: gte
+      limit: {ref: operations.minimum_altitude}
+  ENE-001:
+    text: The padded sampled eclipse shall leave at least the allocated reserve of usable battery 
+      energy.
+    applies_to: [nominal, high_load]
+    configurations: [standard, extended]
+    verify:
+      actual: {ref: power.energy.reserve}
+      op: gte
+      limit: {ref: operations.minimum_reserve}

@@ -1,0 +1,25 @@
+schema: closure/0.1
+project: orbital-energy
+name: Orbital mission / eclipse energy
+description: Synthetic orbit, payload and power teams share evidence with mission operations.
+modules: [model/*.yaml]
+
+scenarios:
+  nominal: {description: Nominal payload operation}
+  high_load:
+    description: Increased payload power
+    overrides:
+      payload.draw: {value: 70, unit: W}
+
+configurations:
+  standard: {description: 40 Wh usable battery}
+  extended:
+    description: 80 Wh usable battery
+    overrides:
+      power.usable_energy: {value: 80, unit: Wh}
+
+policy:
+  name: preliminary-orbit-energy
+  accepted_evidence: [assumed, predicted]
+  description: Synthetic preliminary sizing only; sampled six-hour orbit and ideal cylindrical 
+    shadow.

@@ -1,0 +1,15 @@
+schema: closure/0.1
+study: worker-sizing
+
+scenarios: [routine]
+
+configurations: [balanced]
+
+grid:
+  workload.arrival_rate:
+    - {value: 160, unit: 1/s}
+    - {value: 260, unit: 1/s}
+  platform.workers:
+    - {value: 3}
+    - {value: 4}
+    - {value: 6}

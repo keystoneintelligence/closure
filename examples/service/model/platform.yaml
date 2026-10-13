@@ -1,0 +1,59 @@
+schema: closure/0.1
+module: platform
+name: Serving platform
+owner: Platform engineering
+color: '#36c8ac'
+
+parameters:
+  workers: {value: 4, description: Active serving worker count}
+  worker_capacity:
+    value: 60
+    unit: 1/s
+    origin: assumption
+    rationale: Assumed sustained throughput per worker with a representative request mix.
+  worker_power:
+    value: 40
+    unit: W
+    origin: assumption
+    rationale: Assumed mean power at planning load
+  shared_power:
+    value: 20
+    unit: W
+    origin: assumption
+    rationale: Shared network and storage allocation
+
+analyses:
+  capacity:
+    description: Linear throughput budget with no queueing or latency guarantee.
+    run:
+      argv: [python, analysis/capacity.py]
+      sources: [analysis/capacity.py]
+    inputs:
+      arrival: {ref: workload.arrival_rate, unit: 1/s}
+      workers: {ref: platform.workers}
+      per_worker: {ref: platform.worker_capacity, unit: 1/s}
+    outputs:
+      throughput: {unit: 1/s}
+      headroom: {unit: percent}
+      utilization: {unit: percent}
+      detail: {type: artifact}
+  energy:
+    description: Worker and shared equipment power budget.
+    run:
+      argv: [python, analysis/energy.py]
+      sources: [analysis/energy.py]
+    inputs:
+      workers: {ref: platform.workers}
+      worker_power: {ref: platform.worker_power, unit: W}
+      shared_power: {ref: platform.shared_power, unit: W}
+    outputs:
+      total: {unit: W}
+
+exports:
+  - workers
+  - worker_capacity
+  - capacity.throughput
+  - capacity.headroom
+  - capacity.utilization
+  - capacity.detail
+  - energy.total

@@ -1,0 +1,38 @@
+schema: closure/0.1
+module: physics
+name: Python fluid scaling
+owner: Analysis team
+color: '#30b897'
+
+parameters:
+  lid_speed: {value: 1, unit: m/s}
+  viscosity:
+    value: 0.001
+    unit: m^2/s
+    origin: assumption
+    rationale: Synthetic laminar fluid for the Re=100 cavity example.
+  end_time: {value: 1, unit: s}
+  time_step: {value: 0.002, unit: s}
+  max_reynolds: {value: 200}
+
+analyses:
+  scaling:
+    run:
+      argv: [python, analysis/dimensionless.py]
+      sources: [analysis/dimensionless.py]
+    inputs:
+      length: {ref: geometry.export.length, unit: m}
+      lid_speed: {ref: physics.lid_speed, unit: m/s}
+      viscosity: {ref: physics.viscosity, unit: m^2/s}
+    outputs:
+      reynolds: {type: scalar}
+
+requirements:
+  FLOW-001:
+    text: The example shall remain within its declared low-Reynolds-number scope.
+    verify:
+      actual: {ref: physics.scaling.reynolds}
+      op: lte
+      limit: {ref: physics.max_reynolds}
+
+exports: [lid_speed, viscosity, end_time, time_step, scaling.reynolds]

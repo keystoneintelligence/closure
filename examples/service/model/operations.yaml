@@ -1,0 +1,27 @@
+schema: closure/0.1
+module: operations
+name: Service operations
+owner: Reliability engineering
+color: '#e69a68'
+
+parameters:
+  minimum_headroom: {value: 20, unit: percent, description: Reserved throughput capacity}
+  power_limit: {value: 350, unit: W, description: Equipment power allocation}
+
+requirements:
+  CAP-001:
+    text: Sustained throughput shall retain the reserved capacity headroom.
+    applies_to: [routine, surge]
+    configurations: [balanced, expanded]
+    verify:
+      actual: {ref: platform.capacity.headroom}
+      op: gte
+      limit: {ref: operations.minimum_headroom}
+  ENE-001:
+    text: Serving equipment shall remain within its power allocation.
+    applies_to: [routine, surge]
+    configurations: [balanced, expanded]
+    verify:
+      actual: {ref: platform.energy.total}
+      op: lte
+      limit: {ref: operations.power_limit}

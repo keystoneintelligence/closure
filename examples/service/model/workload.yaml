@@ -1,0 +1,15 @@
+schema: closure/0.1
+module: workload
+name: Workload
+owner: Application engineering
+color: '#9c83ef'
+
+parameters:
+  arrival_rate:
+    value: 160
+    unit: 1/s
+    description: Sustained requests per second
+    origin: assumption
+    rationale: Planning load; replace with measurements from a representative traffic window.
+
+exports: [arrival_rate]

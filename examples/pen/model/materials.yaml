@@ -1,0 +1,80 @@
+schema: closure/0.1
+module: materials
+name: Materials & allowables
+owner: Materials engineering
+color: '#b391f4'
+description: Supplier properties and explicitly assumed design allowables.
+
+parameters:
+  aluminum_density:
+    value: 2.7
+    description: 6061 density; procurement confirmation required
+    unit: g/cm^3
+    origin: assumption
+    rationale: 6061 density; procurement confirmation required
+  aluminum_modulus:
+    value: 69000
+    description: 6061 elastic modulus for room-temperature concept analysis
+    unit: MPa
+    origin: assumption
+    rationale: 6061 elastic modulus for room-temperature concept analysis
+  aluminum_yield:
+    value: 200
+    description: Conservative 6061-T6 design yield; confirm product form and material certificate
+    unit: MPa
+    origin: assumption
+    rationale: Conservative 6061-T6 design yield; confirm product form and material certificate
+  acetal_density:
+    value: 1.42
+    description: Delrin 500P/500CPE typical supplier density
+    unit: g/cm^3
+    origin: assumption
+    rationale: Delrin 500P/500CPE typical supplier density
+  acetal_bearing:
+    value: 25
+    description: Conservative short-duration acetal bearing allowable; creep/wear not covered
+    unit: MPa
+    origin: assumption
+    rationale: Conservative short-duration acetal bearing allowable; creep/wear not covered
+  steel_density:
+    value: 7.85
+    description: Music-wire density assumption
+    unit: g/cm^3
+    origin: assumption
+    rationale: Music-wire density assumption
+  steel_shear_modulus:
+    value: 79300
+    description: Room-temperature music-wire shear modulus assumption
+    unit: MPa
+    origin: assumption
+    rationale: Room-temperature music-wire shear modulus assumption
+  spring_shear_allowable:
+    value: 650
+    description: Derated elastic shear allowable pending wire supplier confirmation
+    unit: MPa
+    origin: assumption
+    rationale: Derated elastic shear allowable pending wire supplier confirmation
+  spring_alternating:
+    value: 350
+    description: Assumed fatigue-screening alternating shear intercept; life test remains open
+    unit: MPa
+    origin: assumption
+    rationale: Assumed fatigue-screening alternating shear intercept; life test remains open
+  spring_mean:
+    value: 900
+    description: Assumed fatigue-screening mean shear intercept
+    unit: MPa
+    origin: assumption
+    rationale: Assumed fatigue-screening mean shear intercept
+
+exports:
+  - aluminum_density
+  - aluminum_modulus
+  - aluminum_yield
+  - acetal_density
+  - acetal_bearing
+  - steel_density
+  - steel_shear_modulus
+  - spring_shear_allowable
+  - spring_alternating
+  - spring_mean

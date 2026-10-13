@@ -1,0 +1,17 @@
+active: true
+derived: false
+header: System power allocation
+level: 1.0
+links: []
+normative: true
+reviewed: null
+text: Total nominal power shall not exceed the approved limit.
+limit_w: 200
+owner: Power team
+references:
+  - path: params.json
+    type: file
+  - path: analysis.py
+    type: file
+  - path: metrics.json
+    type: file

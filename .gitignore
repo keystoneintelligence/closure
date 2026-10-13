@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.hypothesis/
+.closure/
+build/
+dist/
+node_modules/
+docs/reference/
+docs/verification/
+release/site-proposal/
+release/website-change-manifest.json
+frontend/test-results/
+frontend/playwright-report/

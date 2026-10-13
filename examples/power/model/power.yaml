@@ -1,0 +1,28 @@
+schema: closure/0.1
+module: power
+name: Power system
+owner: Power team
+color: '#38bdf8'
+
+parameters:
+  base_load: {value: 100, unit: W}
+
+analyses:
+  budget:
+    run:
+      argv: [python, analysis/power_budget.py]
+      sources: [analysis/]
+    inputs:
+      payload: {ref: payload.peak_power, unit: W}
+      base: {ref: power.base_load, unit: W}
+    outputs:
+      total: {unit: W}
+
+requirements:
+  PWR-001:
+    text: Total nominal power shall not exceed the approved limit.
+    applies_to: [nominal]
+    verify:
+      actual: {ref: power.budget.total}
+      op: lte
+      limit: {value: 200, unit: W}

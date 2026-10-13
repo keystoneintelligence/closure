@@ -1,0 +1,55 @@
+schema: closure/0.1
+module: geometry
+name: Blender geometry
+owner: Design team
+color: '#8f77de'
+
+parameters:
+  design: {path: assets/domain.blend}
+  length: {value: 0.1, unit: m}
+  height: {value: 0.1, unit: m}
+  depth: {value: 0.01, unit: m}
+
+analyses:
+  export:
+    description: Load an actual Blender asset, apply dimensions and export GLB, blend and measured 
+      envelope.
+    run:
+      argv: [python, analysis/blender_driver.py]
+      sources: [analysis/blender_driver.py, analysis/blender_scene.py]
+      tools:
+        blender: blender
+      timeout: 120
+      uncontrolled_dependencies:
+        - Blender's bundled exporters and runtime libraries are not independently fingerprinted; 
+          reuse is disabled.
+    inputs:
+      design: {ref: geometry.design}
+      length: {ref: geometry.length, unit: m}
+      height: {ref: geometry.height, unit: m}
+      depth: {ref: geometry.depth, unit: m}
+    outputs:
+      length: {unit: m}
+      height: {unit: m}
+      depth: {unit: m}
+      volume: {unit: m^3}
+      model: {type: artifact}
+      blend: {type: artifact}
+      inspection: {type: artifact}
+
+requirements:
+  GEO-001:
+    text: Fluid-domain envelope volume shall be positive.
+    verify:
+      actual: {ref: geometry.export.volume}
+      op: gt
+      limit: {value: 0, unit: m^3}
+
+exports:
+  - export.length
+  - export.height
+  - export.depth
+  - export.volume
+  - export.model
+  - export.blend
+  - export.inspection

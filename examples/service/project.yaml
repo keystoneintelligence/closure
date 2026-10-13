@@ -1,0 +1,25 @@
+schema: closure/0.1
+project: service-capacity
+name: Service / capacity and energy
+description: Workload, platform and operations teams check throughput headroom and an energy budget.
+modules: [model/*.yaml]
+
+scenarios:
+  routine: {description: Expected sustained request traffic}
+  surge:
+    description: Elevated sustained request traffic
+    overrides:
+      workload.arrival_rate: {value: 260, unit: 1/s}
+
+configurations:
+  balanced: {description: Four serving workers}
+  expanded:
+    description: Six serving workers
+    overrides:
+      platform.workers: {value: 6}
+
+policy:
+  name: capacity-planning
+  accepted_evidence: [assumed, predicted]
+  description: Deterministic capacity and energy estimates; queue latency and production 
+    availability are outside this scope.

@@ -1,0 +1,40 @@
+schema: closure/0.1
+module: product
+name: Product & requirements
+owner: Product engineering
+color: '#60a5fa'
+description: Defines the user's pen experience and the concept acceptance scope.
+
+parameters:
+  max_mass: {value: 22, description: Finished pen mass target, unit: g}
+  max_length: {value: 145, unit: mm}
+  max_force: {value: 3, unit: N}
+  min_force: {value: 1, unit: N}
+  bending_load: {value: 30, description: Midspan transverse qualification load, unit: N}
+  bending_span: {value: 100, description: Simply supported test span, unit: mm}
+  axial_load: {value: 20, description: Axial writing/handling design load, unit: N}
+  max_stock_mass: {value: 50, description: Aluminum raw-stock mass budget, unit: g}
+
+requirements:
+  PRD-001:
+    text: Finished pen mass shall be within the product target.
+    verify:
+      actual: {ref: manufacturing.materials.mass}
+      op: lte
+      limit: {ref: product.max_mass}
+  PRD-002:
+    text: Retracted overall length shall fit the product envelope.
+    verify:
+      actual: {ref: manufacturing.cad.length}
+      op: lte
+      limit: {ref: product.max_length}
+
+exports:
+  - max_mass
+  - max_length
+  - max_force
+  - min_force
+  - bending_load
+  - bending_span
+  - axial_load
+  - max_stock_mass

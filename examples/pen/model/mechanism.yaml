@@ -1,0 +1,321 @@
+schema: closure/0.1
+module: mechanism
+name: Click mechanism
+owner: Mechanism engineering
+color: '#36c8ac'
+description: Three-lug rotating follower, alternating-depth cam sleeve and guided push button.
+
+parameters:
+  full_stroke: {value: 6, unit: mm}
+  travel: {value: 3, unit: mm}
+  friction_coefficient:
+    value: 0.15
+    description: Assumed bounded sliding coefficient; measure on prototype
+    origin: assumption
+    rationale: Assumed bounded sliding coefficient; measure on prototype
+  sliding_friction: {value: 0.2, unit: N, origin: assumption}
+  cam_radius: {value: 3.1, unit: mm}
+  lug_count: {value: 3}
+  lug_width: {value: 1.4, unit: mm}
+  lug_depth: {value: 0.8, unit: mm}
+  lug_height: {value: 1.4, unit: mm}
+  lug_offset: {value: 1.4, unit: mm}
+  slot_width: {value: 1.8, unit: mm}
+  machining_tolerance: {value: 0.05, unit: mm, origin: assumption}
+  tooth_height: {value: 1.2, unit: mm}
+  guide_diameter: {value: 5.8, unit: mm}
+  guide_length: {value: 10, unit: mm}
+  sleeve_diameter: {value: 9.9, unit: mm}
+  rotor_diameter: {value: 7.8, unit: mm}
+  rotor_clearance: {value: 0.4, unit: mm}
+  rotor_stem: {value: 4.2, unit: mm}
+  rotor_stem_length: {value: 9, unit: mm}
+  rotor_head_height: {value: 4, unit: mm}
+  seat_diameter: {value: 7.5, unit: mm}
+  seat_thickness: {value: 1, unit: mm}
+  button_shaft: {value: 5.8, unit: mm}
+  button_diameter: {value: 8.8, unit: mm}
+  button_projection: {value: 6.5, unit: mm}
+  release_gap: {value: 0.65, unit: mm}
+  phase_offset:
+    value: 5
+    unit: degree
+    description: Crown offset that initiates rotation after the follower clears its guide
+  crown_width:
+    value: 1.4
+    unit: mm
+    description: Radial face-cam width shared by the CAD and force screen.
+  collar_thickness:
+    value: 1
+    unit: mm
+    description: Sleeve retaining-collar thickness; locates the barrel capture shoulder.
+  follower_running_clearance:
+    value: 0.1
+    unit: mm
+    description: Radial clearance between the moving follower envelope and retaining rings.
+  sleeve_housing_clearance:
+    value: 0.1
+    unit: mm
+    description: Radial clearance of the sleeve collar inside the barrel.
+  button_rotor_clearance:
+    value: 0.05
+    unit: mm
+    description: Radial relief of the button crown base relative to the rotor radius.
+  button_crown_base_thickness:
+    value: 1
+    unit: mm
+    description: Axial thickness of the button crown backing disk.
+  plunger_guide_gap:
+    value: 0.2
+    unit: mm
+    description: Axial separation between the plunger guides and the full follower stroke.
+  plunger_slot_depth:
+    value: 1.5
+    unit: mm
+    description: Radial depth of the sleeve slots that clear the button guides.
+  plunger_slot_offset:
+    value: 0.35
+    unit: mm
+    description: Slot radial center measured outward from the rotor radius.
+  key_depth:
+    value: 0.5
+    unit: mm
+    description: Radial anti-rotation key depth; cap pockets derive from this key.
+  key_width: {value: 0.9, unit: mm, description: Tangential anti-rotation key width.}
+  key_length: {value: 4, unit: mm, description: Axial anti-rotation key length.}
+  key_engagement: {value: 1, unit: mm, description: Key length embedded below the sleeve top.}
+  key_clearance:
+    value: 0.2
+    unit: mm
+    description: Total pocket width/depth and axial end clearance around each key.
+  guide_bore_clearance:
+    value: 0.15
+    unit: mm
+    description: Radial clearance between the spring guide and refill stem.
+  seat_bore_clearance:
+    value: 0.1
+    unit: mm
+    description: Radial clearance between the thrust washer and refill stem.
+  slot_radial_clearance:
+    value: 0.08
+    unit: mm
+    description: Radial running clearance beyond the follower tips in the cam sleeve.
+
+analyses:
+  kinematics:
+    description: Force and Coulomb friction feasibility screen using the solved contact cycle and 
+      actual maximum spring stroke.
+    run:
+      argv: [python, analysis/mechanism.py]
+      sources: [analysis/mechanism.py]
+      timeout: 240
+    inputs:
+      travel: {ref: mechanism.travel, unit: mm}
+      friction_coefficient: {ref: mechanism.friction_coefficient}
+      sliding_friction: {ref: mechanism.sliding_friction, unit: N}
+      lug_count: {ref: mechanism.lug_count}
+      lug_width: {ref: mechanism.lug_width, unit: mm}
+      lug_depth: {ref: mechanism.lug_depth, unit: mm}
+      slot_width: {ref: mechanism.slot_width, unit: mm}
+      machining_tolerance: {ref: mechanism.machining_tolerance, unit: mm}
+      guide_diameter: {ref: mechanism.guide_diameter, unit: mm}
+      sleeve_diameter: {ref: mechanism.sleeve_diameter, unit: mm}
+      spring_peak: {ref: spring.response.worst_force, unit: N}
+      spring_preload: {ref: spring.response.preload_force, unit: N}
+      spring_inner: {ref: spring.response.inner_diameter, unit: mm}
+      barrel_inner: {ref: barrel.strength.inner_diameter, unit: mm}
+      bearing_allowable: {ref: materials.acetal_bearing, unit: MPa}
+      retracted_gap: {ref: refill.retracted_gap, unit: mm}
+      axial_stack_tolerance: {ref: refill.axial_stack_tolerance, unit: mm}
+      minimum_return_slope: {ref: mechanism.motion.minimum_return_slope}
+      minimum_crown_slope: {ref: mechanism.motion.minimum_crown_slope}
+      contact_radius: {ref: mechanism.motion.contact_radius, unit: mm}
+      release_clearance: {ref: mechanism.motion.release_clearance, unit: mm}
+      motion: {ref: mechanism.motion.cycle}
+      motion_valid: {ref: mechanism.motion.cycle_valid}
+    outputs:
+      push_force: {unit: N}
+      return_torque: {unit: N*mm}
+      bearing_stress: {unit: MPa}
+      bearing_factor: {type: scalar}
+      slot_clearance: {unit: mm}
+      release_clearance: {unit: mm}
+      guide_clearance: {unit: mm}
+      sleeve_clearance: {unit: mm}
+      tip_extension: {unit: mm}
+      tip_retraction: {unit: mm}
+      cycle_valid: {type: boolean}
+      cycle: {type: artifact}
+  motion:
+    description: Finite-width follower and opposed crown contact envelopes; twelve solved cycles 
+      with a refined-step comparison. Rotation and state are outputs.
+    run:
+      argv: [python, analysis/motion.py]
+      sources: [analysis/motion.py]
+      timeout: 240
+    inputs:
+      full_stroke: {ref: mechanism.full_stroke, unit: mm}
+      travel: {ref: mechanism.travel, unit: mm}
+      tooth_height: {ref: mechanism.tooth_height, unit: mm}
+      phase_offset: {ref: mechanism.phase_offset, unit: degree}
+      release_gap: {ref: mechanism.release_gap, unit: mm}
+      rotor_diameter: {ref: mechanism.rotor_diameter, unit: mm}
+      rotor_clearance: {ref: mechanism.rotor_clearance, unit: mm}
+      lug_depth: {ref: mechanism.lug_depth, unit: mm}
+      lug_width: {ref: mechanism.lug_width, unit: mm}
+      slot_width: {ref: mechanism.slot_width, unit: mm}
+      cam_radius: {ref: mechanism.cam_radius, unit: mm}
+      sleeve_diameter: {ref: mechanism.sleeve_diameter, unit: mm}
+      lug_count: {ref: mechanism.lug_count}
+      machining_tolerance: {ref: mechanism.machining_tolerance, unit: mm}
+      crown_width: {ref: mechanism.crown_width, unit: mm}
+    outputs:
+      cycle: {type: artifact}
+      cycle_valid: {type: boolean}
+      max_rotor_stroke: {unit: mm}
+      release_clearance: {unit: mm}
+      minimum_return_slope: {type: scalar}
+      minimum_crown_slope: {type: scalar}
+      contact_radius: {unit: mm}
+    settings:
+      clicks: 12
+      refined_clicks: 2
+      axial_step_mm: 0.025
+      angular_step_deg: 0.05
+      refinement_factor: 2
+      stroke_convergence_mm: 0.01
+
+requirements:
+  MEC-001:
+    text: Peak button force shall not exceed the product limit.
+    verify:
+      actual: {ref: mechanism.kinematics.push_force}
+      op: lte
+      limit: {ref: product.max_force}
+  MEC-002:
+    text: Peak button force shall exceed the minimum tactile-force target.
+    verify:
+      actual: {ref: mechanism.kinematics.push_force}
+      op: gte
+      limit: {ref: product.min_force}
+  MEC-003:
+    text: Return torque margin shall exceed 0.3 N mm.
+    verify:
+      actual: {ref: mechanism.kinematics.return_torque}
+      op: gte
+      limit: {value: 0.3, unit: N*mm}
+  MEC-004:
+    text: Worst-case follower slot clearance shall be at least 0.1 mm.
+    verify:
+      actual: {ref: mechanism.kinematics.slot_clearance}
+      op: gte
+      limit: {value: 0.1, unit: mm}
+  MEC-005:
+    text: Cam release overtravel shall retain at least 0.5 mm.
+    verify:
+      actual: {ref: mechanism.kinematics.release_clearance}
+      op: gte
+      limit: {value: 0.5, unit: mm}
+  MEC-006:
+    text: Spring guide diametral clearance shall be at least 0.1 mm.
+    verify:
+      actual: {ref: mechanism.kinematics.guide_clearance}
+      op: gte
+      limit: {value: 0.1, unit: mm}
+  MEC-007:
+    text: Mechanism sleeve shall retain at least 0.1 mm diametral housing clearance.
+    verify:
+      actual: {ref: mechanism.kinematics.sleeve_clearance}
+      op: gte
+      limit: {value: 0.1, unit: mm}
+  MEC-008:
+    text: Extended tip shall project at least 1 mm.
+    verify:
+      actual: {ref: mechanism.kinematics.tip_extension}
+      op: gte
+      limit: {value: 1, unit: mm}
+  MEC-009:
+    text: Retracted tip shall remain at least 0.8 mm inside the nose at worst stack.
+    verify:
+      actual: {ref: mechanism.kinematics.tip_retraction}
+      op: gte
+      limit: {value: 0.8, unit: mm}
+  MEC-010:
+    text: The contact-constrained quasi-static solution shall alternate between two stable tip 
+      positions over twelve clicks and remain friction-feasible under the declared coefficient.
+    verify:
+      actual: {ref: mechanism.kinematics.cycle_valid}
+      op: eq
+      limit: {value: true}
+  MEC-011:
+    text: Cam bearing safety factor shall be at least 3.
+    verify:
+      actual: {ref: mechanism.kinematics.bearing_factor}
+      op: gte
+      limit: {value: 3}
+
+exports:
+  - full_stroke
+  - travel
+  - friction_coefficient
+  - sliding_friction
+  - cam_radius
+  - lug_count
+  - lug_width
+  - lug_depth
+  - lug_height
+  - lug_offset
+  - slot_width
+  - machining_tolerance
+  - tooth_height
+  - guide_diameter
+  - guide_length
+  - sleeve_diameter
+  - rotor_diameter
+  - rotor_clearance
+  - rotor_stem
+  - rotor_stem_length
+  - rotor_head_height
+  - seat_diameter
+  - seat_thickness
+  - button_shaft
+  - button_diameter
+  - button_projection
+  - release_gap
+  - kinematics.push_force
+  - kinematics.return_torque
+  - kinematics.bearing_stress
+  - kinematics.bearing_factor
+  - kinematics.slot_clearance
+  - kinematics.release_clearance
+  - kinematics.guide_clearance
+  - kinematics.sleeve_clearance
+  - kinematics.tip_extension
+  - kinematics.tip_retraction
+  - kinematics.cycle_valid
+  - kinematics.cycle
+  - phase_offset
+  - motion.cycle
+  - motion.cycle_valid
+  - motion.max_rotor_stroke
+  - motion.release_clearance
+  - motion.minimum_return_slope
+  - motion.minimum_crown_slope
+  - motion.contact_radius
+  - crown_width
+  - collar_thickness
+  - follower_running_clearance
+  - sleeve_housing_clearance
+  - button_rotor_clearance
+  - button_crown_base_thickness
+  - plunger_guide_gap
+  - plunger_slot_depth
+  - plunger_slot_offset
+  - key_depth
+  - key_width
+  - key_length
+  - key_engagement
+  - key_clearance
+  - guide_bore_clearance
+  - seat_bore_clearance
+  - slot_radial_clearance

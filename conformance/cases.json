@@ -1,0 +1,278 @@
+[
+  {
+    "name": "minimal manifest",
+    "schema": "project",
+    "document": {
+      "schema": "closure/0.1",
+      "project": "demo"
+    },
+    "valid": true
+  },
+  {
+    "name": "future version rejected",
+    "schema": "project",
+    "document": {
+      "schema": "closure/99",
+      "project": "demo"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown manifest field",
+    "schema": "project",
+    "document": {
+      "schema": "closure/0.1",
+      "project": "demo",
+      "magic": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "minimal module",
+    "schema": "module",
+    "document": {
+      "schema": "closure/0.1",
+      "module": "power",
+      "owner": "Team"
+    },
+    "valid": true
+  },
+  {
+    "name": "missing owner",
+    "schema": "module",
+    "document": {
+      "schema": "closure/0.1",
+      "module": "power"
+    },
+    "valid": false
+  },
+  {
+    "name": "normalized request",
+    "schema": "runner-request",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "context": {
+        "scenario": "nominal",
+        "configuration": "default",
+        "point": "baseline"
+      },
+      "inputs": {
+        "load": {
+          "type": "quantity",
+          "value": 80,
+          "unit": "W",
+          "qualifiers": {}
+        }
+      },
+      "settings": {},
+      "tools": {
+        "executables": {},
+        "files": {}
+      },
+      "seed": null,
+      "output_dir": "/runner/output"
+    },
+    "valid": true
+  },
+  {
+    "name": "wrong request protocol",
+    "schema": "runner-request",
+    "document": {
+      "protocol": "closure-run/99",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "context": {
+        "scenario": "nominal",
+        "configuration": "default",
+        "point": "baseline"
+      },
+      "inputs": {
+        "load": {
+          "type": "quantity",
+          "value": 80,
+          "unit": "W",
+          "qualifiers": {}
+        }
+      },
+      "settings": {},
+      "tools": {
+        "executables": {},
+        "files": {}
+      },
+      "seed": null,
+      "output_dir": "/runner/output"
+    },
+    "valid": false
+  },
+  {
+    "name": "short invocation ID",
+    "schema": "runner-request",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "abc",
+      "context": {
+        "scenario": "nominal",
+        "configuration": "default",
+        "point": "baseline"
+      },
+      "inputs": {
+        "load": {
+          "type": "quantity",
+          "value": 80,
+          "unit": "W",
+          "qualifiers": {}
+        }
+      },
+      "settings": {},
+      "tools": {
+        "executables": {},
+        "files": {}
+      },
+      "seed": null,
+      "output_dir": "/runner/output"
+    },
+    "valid": false
+  },
+  {
+    "name": "string numeric input",
+    "schema": "runner-request",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "context": {
+        "scenario": "nominal",
+        "configuration": "default",
+        "point": "baseline"
+      },
+      "inputs": {
+        "load": {
+          "type": "quantity",
+          "value": "80",
+          "unit": "W"
+        }
+      },
+      "settings": {},
+      "tools": {
+        "executables": {},
+        "files": {}
+      },
+      "seed": null,
+      "output_dir": "/runner/output"
+    },
+    "valid": false
+  },
+  {
+    "name": "valid output",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "value": 180,
+          "unit": "W"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "numeric boolean rejected",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "type": "scalar",
+          "value": true
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid residual",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "value": 180,
+          "unit": "W"
+        }
+      },
+      "residuals": {
+        "r": "small"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "nonboolean convergence",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "value": 180,
+          "unit": "W"
+        }
+      },
+      "converged": "true"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown response field",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "value": 180,
+          "unit": "W"
+        }
+      },
+      "extra": {}
+    },
+    "valid": false
+  },
+  {
+    "name": "valid artifact shape",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "mesh": {
+          "type": "artifact",
+          "path": "mesh.glb",
+          "qualifiers": {
+            "frame": "body"
+          }
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "artifact scalar conflict",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "mesh": {
+          "type": "artifact",
+          "path": "mesh.glb",
+          "value": 42
+        }
+      }
+    },
+    "valid": false
+  }
+]

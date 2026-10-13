@@ -1,0 +1,30 @@
+schema: closure/0.1
+module: system
+name: System
+owner: Project team
+color: '#36c8ac'
+
+parameters:
+  allocation:
+    value: 0.5
+    description: Illustrative normalized allocation; replace with your input
+
+analyses:
+  evaluate:
+    description: Replace this identity calculation with your existing analysis or tool wrapper.
+    run:
+      argv: [python, analysis/evaluate.py]
+      sources: [analysis/evaluate.py]
+    inputs:
+      allocation: {ref: system.allocation}
+    outputs:
+      used: {type: scalar}
+
+requirements:
+  EXAMPLE-001:
+    text: The illustrative allocation shall not exceed the available normalized budget. Replace with
+      your requirement.
+    verify:
+      actual: {ref: system.evaluate.used}
+      op: lte
+      limit: {value: 1}

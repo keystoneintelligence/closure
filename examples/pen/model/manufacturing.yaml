@@ -1,0 +1,203 @@
+schema: closure/0.1
+module: manufacturing
+name: CAD & manufacturing
+owner: Manufacturing engineering
+color: '#ed9660'
+description: Builds the actual solids and derives material quantities from their volumes.
+
+analyses:
+  cad:
+    description: Generate ten named B-rep solids, STEP, GLB, STL parts, and a general-purpose 
+      assembly manifest.
+    run:
+      argv: [python, analysis/cad.py]
+      sources: [analysis/cad.py]
+      timeout: 600
+    inputs:
+      barrel_diameter: {ref: barrel.diameter, unit: mm}
+      barrel_length: {ref: barrel.length, unit: mm}
+      nose_length: {ref: barrel.nose_length, unit: mm}
+      nose_tip_diameter: {ref: barrel.nose_tip_diameter, unit: mm}
+      tip_bore: {ref: barrel.tip_bore, unit: mm}
+      spring_cavity: {ref: barrel.spring_cavity, unit: mm}
+      thread_engagement: {ref: barrel.thread_engagement, unit: mm}
+      cap_length: {ref: barrel.cap_length, unit: mm}
+      refill_length: {ref: refill.length, unit: mm}
+      refill_diameter: {ref: refill.diameter, unit: mm}
+      refill_stem: {ref: refill.stem, unit: mm}
+      refill_shoulder: {ref: refill.shoulder, unit: mm}
+      retracted_gap: {ref: refill.retracted_gap, unit: mm}
+      spring_wire: {ref: spring.wire, unit: mm}
+      spring_mean: {ref: spring.mean_diameter, unit: mm}
+      spring_coils: {ref: spring.active_coils}
+      spring_installed: {ref: spring.installed_length, unit: mm}
+      tooth_height: {ref: mechanism.tooth_height, unit: mm}
+      full_stroke: {ref: mechanism.full_stroke, unit: mm}
+      travel: {ref: mechanism.travel, unit: mm}
+      rotor_stem: {ref: mechanism.rotor_stem, unit: mm}
+      rotor_stem_length: {ref: mechanism.rotor_stem_length, unit: mm}
+      rotor_diameter: {ref: mechanism.rotor_diameter, unit: mm}
+      rotor_head_height: {ref: mechanism.rotor_head_height, unit: mm}
+      lug_offset: {ref: mechanism.lug_offset, unit: mm}
+      lug_depth: {ref: mechanism.lug_depth, unit: mm}
+      lug_width: {ref: mechanism.lug_width, unit: mm}
+      lug_height: {ref: mechanism.lug_height, unit: mm}
+      sleeve_diameter: {ref: mechanism.sleeve_diameter, unit: mm}
+      rotor_clearance: {ref: mechanism.rotor_clearance, unit: mm}
+      slot_width: {ref: mechanism.slot_width, unit: mm}
+      button_shaft: {ref: mechanism.button_shaft, unit: mm}
+      button_diameter: {ref: mechanism.button_diameter, unit: mm}
+      button_projection: {ref: mechanism.button_projection, unit: mm}
+      release_gap: {ref: mechanism.release_gap, unit: mm}
+      seat_diameter: {ref: mechanism.seat_diameter, unit: mm}
+      seat_thickness: {ref: mechanism.seat_thickness, unit: mm}
+      guide_diameter: {ref: mechanism.guide_diameter, unit: mm}
+      guide_length: {ref: mechanism.guide_length, unit: mm}
+      barrel_inner: {ref: barrel.strength.inner_diameter, unit: mm}
+      cam_radius: {ref: mechanism.cam_radius, unit: mm}
+      phase_offset: {ref: mechanism.phase_offset, unit: degree}
+      lug_count: {ref: mechanism.lug_count}
+      motion: {ref: mechanism.motion.cycle}
+      crown_width: {ref: mechanism.crown_width, unit: mm}
+      joint_radial_clearance: {ref: barrel.joint_radial_clearance, unit: mm}
+      cap_spigot_length: {ref: barrel.cap_spigot_length, unit: mm}
+      button_radial_clearance: {ref: barrel.button_radial_clearance, unit: mm}
+      cap_register_lip: {ref: barrel.cap_register_lip, unit: mm}
+      capture_shoulder_thickness: {ref: barrel.capture_shoulder_thickness, unit: mm}
+      collar_thickness: {ref: mechanism.collar_thickness, unit: mm}
+      follower_running_clearance: {ref: mechanism.follower_running_clearance, unit: mm}
+      sleeve_housing_clearance: {ref: mechanism.sleeve_housing_clearance, unit: mm}
+      button_rotor_clearance: {ref: mechanism.button_rotor_clearance, unit: mm}
+      button_crown_base_thickness: {ref: mechanism.button_crown_base_thickness, unit: mm}
+      plunger_guide_gap: {ref: mechanism.plunger_guide_gap, unit: mm}
+      plunger_slot_depth: {ref: mechanism.plunger_slot_depth, unit: mm}
+      plunger_slot_offset: {ref: mechanism.plunger_slot_offset, unit: mm}
+      key_depth: {ref: mechanism.key_depth, unit: mm}
+      key_width: {ref: mechanism.key_width, unit: mm}
+      key_length: {ref: mechanism.key_length, unit: mm}
+      key_engagement: {ref: mechanism.key_engagement, unit: mm}
+      key_clearance: {ref: mechanism.key_clearance, unit: mm}
+      guide_bore_clearance: {ref: mechanism.guide_bore_clearance, unit: mm}
+      seat_bore_clearance: {ref: mechanism.seat_bore_clearance, unit: mm}
+      spring_inactive_coils: {ref: spring.inactive_coils}
+      spring_end_pitch_factor: {ref: spring.end_pitch_factor}
+      stock_allowance: {ref: manufacturing.stock_allowance, unit: mm}
+      slot_radial_clearance: {ref: mechanism.slot_radial_clearance, unit: mm}
+    outputs:
+      model: {type: artifact}
+      step: {type: artifact}
+      assembly: {type: artifact}
+      stl_parts: {type: artifact}
+      valid: {type: boolean}
+      part_count: {type: scalar}
+      length: {unit: mm}
+      spring_volume: {unit: mm^3}
+      native_parts: {type: artifact}
+    settings:
+      angular_section_deg: 2
+      surface_relief_mm: 0.003
+      boolean_overlap_mm: 0.1
+      crown_root_overlap_mm: 0.02
+      housing_fuse_overlap_mm: 0.01
+      cutter_extra_mm: 0.5
+      register_cut_overrun_mm: 0.05
+      plunger_slot_overrun_mm: 0.1
+      spring_samples_per_turn: 32
+      mesh_linear_mm: 0.055
+      mesh_angular_rad: 0.15
+  materials:
+    description: Compute purchased and manufactured material quantities from actual CAD solid 
+      volumes.
+    run:
+      argv: [python, analysis/bom.py]
+      sources: [analysis/bom.py]
+      timeout: 240
+    inputs:
+      assembly: {ref: manufacturing.cad.assembly}
+      aluminum_density: {ref: materials.aluminum_density, unit: g/cm^3}
+      acetal_density: {ref: materials.acetal_density, unit: g/cm^3}
+      steel_density: {ref: materials.steel_density, unit: g/cm^3}
+      refill_mass: {ref: refill.mass, unit: g}
+    outputs:
+      mass: {unit: g}
+      aluminum_volume: {unit: mm^3}
+      raw_aluminum_mass: {unit: g}
+      material_yield: {unit: percent}
+      bom: {type: artifact}
+      bom_csv: {type: artifact}
+  contacts:
+    description: Reload exported native B-reps and check sampled rigid-part intersections over 
+      computed press/release motion, including static housing interfaces. Deformable spring 
+      excluded.
+    run:
+      argv: [python, analysis/contacts.py]
+      sources: [analysis/contacts.py]
+      timeout: 1200
+    inputs:
+      parts: {ref: manufacturing.cad.native_parts}
+      motion: {ref: mechanism.motion.cycle}
+    outputs:
+      valid: {type: boolean}
+      max_intersection: {unit: mm^3}
+      sample_count: {type: scalar}
+      audit: {type: artifact}
+    settings:
+      checked_clicks: 3
+      angular_sample_deg: 3
+      axial_sample_mm: 0.35
+      intersection_tolerance_mm3: 0.001
+      bounding_box_epsilon_mm: 1e-07
+
+requirements:
+  CAD-001:
+    text: Every generated component shall be one connected, valid positive-volume solid.
+    verify:
+      actual: {ref: manufacturing.cad.valid}
+      op: eq
+      limit: {value: true}
+  CAD-002:
+    text: Assembly shall contain the ten specified components.
+    verify:
+      actual: {ref: manufacturing.cad.part_count}
+      op: eq
+      limit: {value: 10}
+  MFG-001:
+    text: Raw aluminum stock shall remain within the product material budget.
+    verify:
+      actual: {ref: manufacturing.materials.raw_aluminum_mass}
+      op: lte
+      limit: {ref: product.max_stock_mass}
+  CAD-003:
+    text: Sampled nominal rigid-component positions along the solved press/release path shall have 
+      no solid-volume intersection above 0.001 cubic millimeters.
+    verify:
+      actual: {ref: manufacturing.contacts.valid}
+      op: eq
+      limit: {value: true}
+
+exports:
+  - cad.model
+  - cad.step
+  - cad.assembly
+  - cad.stl_parts
+  - cad.valid
+  - cad.part_count
+  - cad.length
+  - cad.spring_volume
+  - materials.mass
+  - materials.aluminum_volume
+  - materials.raw_aluminum_mass
+  - materials.material_yield
+  - materials.bom
+  - materials.bom_csv
+  - cad.native_parts
+  - contacts.valid
+  - contacts.max_intersection
+  - contacts.sample_count
+  - contacts.audit
+
+parameters:
+  stock_allowance:
+    value: 4
+    unit: mm
+    description: Total axial aluminum stock allowance for facing and parting.

@@ -1,0 +1,19 @@
+include LICENSE NOTICE THIRD_PARTY_NOTICES.md CHANGELOG.md CONTRIBUTING.md SECURITY.md
+include .gitattributes .gitignore
+include docs/AUTHORING_STANDARD.md docs/CLI_GUIDE.md docs/ENGINE_GUIDE.md docs/VIEWER_GUIDE.md
+include docs/VIEWER_API.md docs/QUICKSTART.md docs/COMPATIBILITY.md docs/RELEASE.md
+include docs/PEN_INPUT_AUDIT.md
+recursive-include spec *.md
+recursive-include schema *.json *.md
+recursive-include conformance *.json *.md *.yaml *.mjs
+recursive-include tools *.py
+recursive-include tests *.py
+recursive-include frontend *.js *.json
+recursive-include examples *.yaml *.yml *.py *.md *.blend baseline.json
+recursive-include .github *.yml
+include release/preview.json release/ONBOARDING_REVIEW.md
+include release/dependency-snapshots.json
+prune frontend/node_modules
+prune frontend/test-results
+prune frontend/playwright-report
+global-exclude *.pyc *.pyo

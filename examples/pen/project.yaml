@@ -1,0 +1,12 @@
+schema: closure/0.1
+project: click-pen
+name: Click / engineering demonstrator
+description: A retractable pen designed by eight cooperating teams. Analytical concept gate; 
+  physical validation obligations remain visible.
+modules: [model/*.yaml]
+
+policy:
+  name: analytical-concept
+  accepted_evidence: [assumed, predicted]
+  description: Accept deterministic analytical and CAD evidence under explicitly declared 
+    assumptions. Manufacturing release requires physical tests.
