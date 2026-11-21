@@ -11,7 +11,7 @@ from . import __version__
 from .evidence import EvidenceStore, environment_identity, resolve_executable, source_snapshot, tool_identity, utcnow
 from .io import ClosureError, atomic_json, digest, file_digest, load_source, read_json, within
 from .models import Binding, Criterion, Datum, Study
-from .protocol import Report, StudyResult
+from .protocol import validate_report, StudyResult
 from .project import Project, criteria, refs
 from .units import convert
 from .editing import project_lock
@@ -187,9 +187,10 @@ class Engine:
         report = self.report()
         return self.store.save_report(report)
 
-    def baseline(self):
-        path = within(self.project.root, self.project.manifest.baseline)
-        current = digest(self.project.obligation_contract())
+    def baseline(self, project=None):
+        project = project or self.project
+        path = within(project.root, project.manifest.baseline)
+        current = digest(project.obligation_contract())
         if not path.exists():
             return {"status": "missing", "current_hash": current, "message": "Initial obligations need a recorded baseline review."}
         approved = read_json(path)
@@ -198,17 +199,18 @@ class Engine:
                 "approved_hash": approved.get("contract_hash"), "reviewer": approved.get("reviewer"),
                 "message": "Obligations match the reviewed baseline." if valid else "Requirements, scope, context set, or policy changed; separate review required."}
 
-    def _reviews(self):
+    def _reviews(self, project=None):
+        project = project or self.project
         reviews = []
-        for pattern in self.project.manifest.reviews:
-            within(self.project.root, pattern)
-            for path in self.project.root.glob(pattern):
+        for pattern in project.manifest.reviews:
+            within(project.root, pattern)
+            for path in project.root.glob(pattern):
                 review = read_json(path)
                 if review.get("reviewer") and review.get("reason"):
                     reviews.append(review)
         return sorted(reviews, key=lambda r: r.get("at", ""))
 
-    def _criterion_support(self, criterion, index):
+    def _criterion_support(self, criterion, index, policy):
         sources = [binding.ref for binding in refs(criterion)]
         producers = sorted({self.project.producers[ref] for ref in sources if ref in self.project.producers})
         states = [self.states.get(p, "missing") for p in producers]
@@ -225,7 +227,7 @@ class Engine:
                 "verdict": comparison["verdict"] if comparison else "unknown", "comparison": comparison,
                 "dependencies": producers, "evidence": [self.records[p]["id"] for p in producers if p in self.records],
                 "evidence_classes": sorted(classes),
-                "evidence_allowed": classes.issubset(self.project.manifest.policy.accepted_evidence)}
+                "evidence_allowed": classes.issubset(policy.accepted_evidence)}
 
     def assess(self, identifier, baseline, reviews):
         requirement = self.project.requirements[identifier]
@@ -234,7 +236,14 @@ class Engine:
         sources = [binding.ref for c in conditions for binding in refs(c)]
         producers = sorted({self.project.producers[ref] for ref in sources if ref in self.project.producers})
         alternative = bool(conditions) and not isinstance(requirement.verify, Criterion) and requirement.verify.any_of is not None
-        branches = [self._criterion_support(c, i) for i, c in enumerate(conditions)]
+        policy = self.project.manifest.policy
+        if self.project.composition:
+            policies = self.project.composition.policies(identifier)
+            policy = self.project.unit_for(identifier).manifest.policy.model_copy(update={
+                "accepted_evidence": sorted(set.intersection(*(set(p.accepted_evidence) for p in policies))),
+                "require_review": any(p.require_review for p in policies),
+                "allow_waivers": all(p.allow_waivers for p in policies)})
+        branches = [self._criterion_support(c, i, policy) for i, c in enumerate(conditions)]
         # A declared alternative needs one current passing branch. Prefer evidence
         # allowed by policy; unused alternatives must not veto its closure.
         passing = [b for b in branches if b["verdict"] == "pass" and b["execution"] == "complete"]
@@ -250,7 +259,6 @@ class Engine:
             verdict = ("pass" if "pass" in outcomes else "unknown" if "unknown" in outcomes else "fail") if alternative else ("fail" if "fail" in outcomes else "unknown" if "unknown" in outcomes else "pass")
         comparisons = [{**b["comparison"], "branch": b["index"]} for b in branches if b["comparison"]]
         classes = {c for b in support for c in b["evidence_classes"]}
-        policy = self.project.manifest.policy
         signature = digest({"requirement": requirement.model_dump(), "context": self.context, "policy": policy.model_dump(),
                             "records": {p: self.records.get(p, {}).get("record_hash") for p in producers},
                             "inputs": {r: self.parameters[r].model_dump() for r in sources if r in self.parameters}})
@@ -281,7 +289,20 @@ class Engine:
     def report(self):
         baseline = self.baseline()
         reviews = self._reviews()
-        assessments = [self.assess(identifier, baseline, reviews) for identifier in self.project.requirements]
+        composition = self.project.composition
+        baselines = {self.project.manifest.project: baseline}
+        if composition:
+            for unit in composition.units.values():
+                supplies_claim = any(key.startswith(unit.name + "::") for key in self.project.scope)
+                if unit is composition.root or not (unit.owned or supplies_claim):
+                    continue
+                local = Project(unit.path, self.project.workspace)
+                baselines[unit.name] = self.baseline(local)
+                for review in self._reviews(local):
+                    key = review.get("requirement", "")
+                    reviews.append({**review, "requirement": key if local.composition else unit.qualify(key)})
+        assessments = [self.assess(key, baselines.get(self.project.unit_for(key).name, baseline) if composition else baseline, reviews)
+                       for key in self.project.requirements]
         scoped = [a for a in assessments if a["scoped"]]
         gate = bool(scoped) and bool(self.project.manifest.scenarios) and bool(self.project.manifest.configurations) and baseline["status"] == "current" and all(a["gate_allowed"] for a in scoped)
         analyses = [{"id": identifier, "state": self.states.get(identifier, "missing"), "execution_key": self.keys.get(identifier),
@@ -297,7 +318,11 @@ class Engine:
                 "limitations": ["Assessment applies only to declared dependencies, selected context, model validity, and acceptance policy.",
                                 "Modelled performance requires corresponding validation or test evidence before being treated as observed performance.",
                                 "Local analyses execute trusted code; host and undeclared external dependencies are not isolated."]}
-        Report.model_validate(report)
+        if composition:
+            gates = composition.gates(assessments, baselines, self.project.requirements)
+            report.update(schema="closure-report/0.2", projects=composition.describe(), gates=gates,
+                          gate=gates[composition.root.name]["gate"])
+        validate_report(report)
         return report
 
     def explain(self, identifier):
@@ -305,7 +330,7 @@ class Engine:
             raise ClosureError(f"Unknown requirement {identifier}", "UNKNOWN_REF")
         if not self.states:
             self.plan()
-        assessment = self.assess(identifier, self.baseline(), self._reviews())
+        assessment = next(row for row in self.report()["requirements"] if row["id"] == identifier)
         paths = []
         def trace(node, suffix, visited):
             if node in visited:
