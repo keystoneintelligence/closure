@@ -162,6 +162,24 @@ class Manifest(Contract):
     reviews: list[str] = Field(default_factory=lambda: ["reviews/acceptance/*.json"])
 
 
+class ChildProject(Contract):
+    path: str = Field(min_length=1)
+    required: bool = True
+
+
+class ProjectImport(Contract):
+    path: str = Field(min_length=1)
+    export: str = Field(min_length=1)
+
+
+class CompositionManifest(Manifest):
+    schema_version: Literal["closure/0.2"] = Field(alias="schema")
+    children: dict[str, ChildProject] = Field(default_factory=dict)
+    imports: dict[str, ProjectImport] = Field(default_factory=dict)
+    exports: dict[str, str] = Field(default_factory=dict)
+    required_claims: list[str] = Field(default_factory=list)
+
+
 class Study(Contract):
     schema_version: Literal["closure/0.1"] = Field(alias="schema")
     study: str
