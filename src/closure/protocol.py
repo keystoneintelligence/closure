@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, TypeAdapter
 
-from .models import Datum, Manifest, Module, Policy
+from .models import CompositionManifest, Datum, Manifest, Module, Policy
 
 Number = StrictInt | Annotated[float, Field(strict=True, allow_inf_nan=False)]
 Scalar = Number | StrictBool | StrictStr
@@ -288,6 +288,42 @@ class Report(RuntimeContract):
     report_hash: Hash | None = None
 
 
+class ComposedModel(ModelSnapshot):
+    project: CompositionManifest
+
+
+class ProjectDescription(RuntimeContract):
+    name: str
+    source: str
+    owned: bool
+    children: dict[str, str]
+    imports: dict[str, str]
+    exports: dict[str, str]
+    scope: list[str]
+    excluded_children: list[str]
+    policy: Policy
+
+
+class ProjectGate(RuntimeContract):
+    project: str
+    gate: bool
+    applicable: int
+    scope: list[str]
+    reasons: list[str]
+
+
+class ComposedReport(Report):
+    schema_version: Literal["closure-report/0.2"] = Field(alias="schema")
+    model: ComposedModel
+    projects: dict[str, ProjectDescription]
+    gates: dict[str, ProjectGate]
+
+
+def validate_report(report):
+    model = ComposedReport if report.get("schema") == "closure-report/0.2" else Report
+    return model.model_validate(report)
+
+
 class StudyResult(RuntimeContract):
     schema_version: Literal["closure-study/0.1"] = Field(alias="schema")
     study: str
@@ -295,10 +331,10 @@ class StudyResult(RuntimeContract):
     completed: int = Field(ge=0)
     passed: int = Field(ge=0)
     failed: int = Field(ge=0)
-    reports: list[Report]
+    reports: list[Report | ComposedReport]
     complete_evidence: bool
 
 
 RUNTIME_SCHEMAS = {"runner-request": RunnerRequest, "runner-response": RunnerResponse,
-                   "evidence": EvidenceRecord, "report": Report, "study-result": StudyResult,
+                   "evidence": EvidenceRecord, "report": Report, "composed-report": ComposedReport, "study-result": StudyResult,
                    "review": ReviewRecord}

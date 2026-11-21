@@ -157,6 +157,49 @@ class Composition:
             result.extend(unit.reference("@" + alias) for alias in getattr(unit.manifest, "required_claims", []))
         return sorted(set(result))
 
+    def local_scope(self, unit, requirements):
+        scope = unit.manifest.scope
+        local = [k for k, v in requirements.items() if k.startswith(unit.name + "::") and v.required] if scope == ["*"] else [unit.qualify(k) for k in scope]
+        return local + [unit.reference("@" + alias) for alias in getattr(unit.manifest, "required_claims", [])]
+
+    def policies(self, identifier):
+        unit = self.modules[identifier.split(".")[0]]
+        owners = {unit.name}
+        for consumer in self.units.values():
+            if consumer.owned and identifier in [consumer.reference("@" + a) for a in getattr(consumer.manifest, "required_claims", [])]:
+                owners.add(consumer.name)
+        pending = list(owners)
+        while pending:
+            child = pending.pop()
+            for parent in self.units.values():
+                if child in parent.children.values() and parent.name not in owners:
+                    owners.add(parent.name)
+                    pending.append(parent.name)
+        return [self.units[name].manifest.policy for name in sorted(owners)]
+
+    def gates(self, assessments, baselines, requirements):
+        indexed = {r["id"]: r for r in assessments}
+        gates = {}
+        def evaluate(unit):
+            if unit.name in gates:
+                return gates[unit.name]
+            scoped = self.local_scope(unit, requirements)
+            children = [evaluate(self.units[name]) for name in unit.children.values()]
+            applicable = sum(indexed[key]["applicability"] == "applicable" for key in scoped)
+            applicable += sum(child["applicable"] for child in children)
+            reasons = [key for key in scoped if not indexed[key]["gate_allowed"]]
+            reasons.extend(child["project"] for child in children if not child["gate"])
+            if baselines[unit.name]["status"] != "current":
+                reasons.append("Obligation baseline " + baselines[unit.name]["status"])
+            if not applicable:
+                reasons.append("No applicable obligations")
+            result = {"project": unit.name, "gate": not reasons, "applicable": applicable,
+                      "scope": scoped, "reasons": reasons}
+            gates[unit.name] = result
+            return result
+        evaluate(self.root)
+        return gates
+
     def describe(self):
         return {unit.name: {"name": unit.manifest.name or unit.name, "source": unit.path.relative_to(self.workspace).as_posix(),
                             "owned": unit.owned, "children": unit.children, "imports": unit.imports,
