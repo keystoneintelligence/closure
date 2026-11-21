@@ -37,14 +37,14 @@ def prepare(output):
         destination.parent.mkdir(parents=True,exist_ok=True)
         shutil.copyfile(path,destination)
         entries.append({'path':relative.as_posix(),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size})
-    archive=output/'closure-0.1.0a1-source.zip'
+    archive=output/'closure-0.2.0a1-source.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as bundle:
         for entry in entries:
-            info=zipfile.ZipInfo('closure-0.1.0a1/'+entry['path'],date_time=(2026,10,11,0,0,0))
+            info=zipfile.ZipInfo('closure-0.2.0a1/'+entry['path'],date_time=(2026,10,11,0,0,0))
             info.compress_type=zipfile.ZIP_DEFLATED
             info.external_attr=0o100644 << 16
             bundle.writestr(info,(source/entry['path']).read_bytes())
-    manifest={'version':'0.1.0a1','status':'review-only; not publication approval','archive':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'files':entries,
+    manifest={'version':'0.2.0a1','status':'review-only; not publication approval','archive':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'files':entries,
               'excluded':['MTP.md','NORTH_STAR.md','Closure_RFC_0001.md','raw conversation','local evidence stores','development verification logs','prebuilt engineering deliverables','virtual environments','dependency installs','private website configuration']}
     (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print(json.dumps({'output':str(output),'files':len(entries),'archive':str(archive),'sha256':manifest['sha256']},indent=2))

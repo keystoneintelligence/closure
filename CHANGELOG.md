@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0a1 local composition preview
+
+- Link owned children and shared public values, artifacts and verified requirements across local projects.
+- Assess the selected system, retain per-project gates and explain affected work in the CLI, viewer and exported history.
+- Use the versioned 0.2 manifest and report for composed projects. The 0.1 source, runner, evidence and saved standalone report contracts remain supported.
+
+
 ## 0.1.0a1 — early release candidate
 
 The first coordinated release contains three separately described products: the Closure 0.1 specification, Python CLI/backend reference implementation, and bundled local browser viewer.

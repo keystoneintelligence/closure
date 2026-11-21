@@ -92,7 +92,7 @@ test('composed power history and project navigation', async ({page, serviceURL},
   expect(second.gate).toBe(false);
   expect(second.executed).toEqual([]);
   await page.getByRole('button', {name:'Overview',exact:true}).click();
-  await expect(page.getByText(/limit changed from 110 W to 100 W/)).toBeVisible();
+  await expect(page.getByText(/limit changed from 110 W to 100 W/i)).toBeVisible();
   const panel = page.locator('.composition').first();
   await panel.getByText('Execution and reuse').click();
   await expect(panel.getByText(/Reused the verified run/).first()).toBeVisible();

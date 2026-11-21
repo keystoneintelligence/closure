@@ -1,8 +1,10 @@
 # First verification
 
+From this checkout install the preview with `python -m pip install .`. Follow the [assembly example](../examples/composed-power/README.md) to verify and inspect four connected projects.
+
 The preview has three parts: the [specification](../spec/0.1/SPECIFICATION.md), the Python reference CLI/backend, and its optional local viewer. You can write a runner in any language. Node is only needed to rebuild the viewer or run the JavaScript example; installing the wheel includes built viewer assets.
 
-## Install the reviewed candidate
+## Install the earlier published 0.1 preview
 
 Use Python 3.10 or 3.12 on Windows or Linux. Download `closure_se-0.1.0a1-py3-none-any.whl` from the [v0.1.0a1 release assets](https://github.com/keystoneintelligence/closure/releases/tag/v0.1.0a1). The release also includes source archives, SHA-256 checksums, and a release record identifying the tested commit. From its directory:
 

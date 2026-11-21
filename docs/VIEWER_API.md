@@ -1,8 +1,10 @@
-# Local viewer API: closure-viewer/0.1
+# Local viewer API: closure-viewer/0.2
 
-This provisional API is bundled with `closure-se==0.1.0a1`. Use the matching viewer assets. It serves one selected project per local server session; project selection affects all tabs. Operations serialize to keep project selection and guarded writes consistent. It is not a hosted or multiuser service.
+GET /api/compare?report=ID&base=EARLIER_ID compares two sealed snapshots from the same project and context. Composed reports include projects, gates and, after verification, revision and comparison.
 
-Every JSON response carries `X-Closure-API: closure-viewer/0.1`. The bundled client sends the same header and refuses a missing/different response version. A mismatching request version returns HTTP 409. Legacy requests without the header remain accepted during this preview; new clients should send it. `GET /api/version` reports API, implementation, source, runner and trusted-execution metadata. Protocol versioning is independent of the URL path.
+This provisional API is bundled with `closure-se==0.2.0a1`. Use the matching viewer assets. It serves one selected project per local server session; project selection affects all tabs. Operations serialize to keep project selection and guarded writes consistent. It is not a hosted or multiuser service.
+
+Every JSON response carries `X-Closure-API: closure-viewer/0.2`. The bundled client sends the same header and refuses a missing/different response version. A mismatching request version returns HTTP 409. Legacy requests without the header remain accepted during this preview; new clients should send it. `GET /api/version` reports API, implementation, source, runner and trusted-execution metadata. Protocol versioning is independent of the URL path.
 
 | Method/path | Request | Response |
 | --- | --- | --- |

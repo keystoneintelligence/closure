@@ -17,7 +17,7 @@ def manifest_path(path):
     candidates = [path / name for name in ("project.yaml", "project.yml", "project.json") if (path / name).is_file()]
     if len(candidates) > 1:
         raise ClosureError("Multiple project manifests; select one explicitly", "AMBIGUOUS_MANIFEST", str(path))
-    return candidates[0] if candidates else path / "project.yaml"
+    return (candidates[0] if candidates else path / "project.yaml").resolve()
 
 
 def workspace_root(selected, boundary=None):
@@ -38,7 +38,7 @@ def locate(source, locator, workspace):
         locator = url2pathname(url.path)
     elif "://" in locator:
         raise ClosureError(f"Unsupported project locator {locator}", "LOCATOR", str(source))
-    path = manifest_path(source.parent / locator)
+    path = manifest_path(within(workspace, source.parent / locator))
     if not path.is_relative_to(workspace):
         raise ClosureError(f"Project link escapes workspace: {locator}", "PATH_ESCAPE", str(source))
     if not path.is_file():
@@ -150,11 +150,7 @@ class Composition:
         for unit in self.units.values():
             if not unit.owned:
                 continue
-            if unit.manifest.scope == ["*"]:
-                result.extend(key for key, req in requirements.items() if key.startswith(unit.name + "::") and req.required)
-            else:
-                result.extend(unit.qualify(ref) for ref in unit.manifest.scope)
-            result.extend(unit.reference("@" + alias) for alias in getattr(unit.manifest, "required_claims", []))
+            result.extend(self.local_scope(unit, requirements))
         return sorted(set(result))
 
     def local_scope(self, unit, requirements):

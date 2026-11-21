@@ -94,6 +94,17 @@ class Project:
                     target = unit.qualify(symbol)
                     if target not in self.ports and target not in self.requirements:
                         raise ClosureError(f"Unknown export {unit.name}.{public}: {symbol}", "UNKNOWN_EXPORT", str(unit.path))
+                for alias, link in getattr(unit.manifest, "imports", {}).items():
+                    if link.port is None:
+                        continue
+                    target = unit.imports[alias]
+                    port = self.ports.get(target)
+                    if port is None or port.type != link.port.type or (port.type == "enum" and port.choices != link.port.choices):
+                        raise ClosureError(f"{unit.name}.{alias}: {target} has incompatible type", "TYPE_MISMATCH", str(unit.path))
+                    try:
+                        compatible(port, link.port.unit, link.port.qualifiers)
+                    except ClosureError as exc:
+                        raise ClosureError(f"{unit.name}.{alias} -> {target}: {exc}", exc.code, str(unit.path)) from exc
         for identifier in self.scope:
             if identifier not in self.requirements:
                 raise ClosureError(f"Unknown scoped requirement {identifier}", "UNKNOWN_REF")
@@ -285,6 +296,13 @@ class Project:
         diagnostics = []
         if not self.scope or not self.manifest.scenarios or not self.manifest.configurations:
             diagnostics.append({"code": "EMPTY_SCOPE", "message": "Required scope and contexts must be nonempty", "location": str(self.manifest_path)})
+        if self.composition:
+            for unit in self.composition.units.values():
+                for names in ("scenarios", "configurations"):
+                    missing = set(getattr(self.manifest, names)) - set(getattr(unit.manifest, names))
+                    if missing:
+                        diagnostics.append({"code": "UNKNOWN_CONTEXT", "location": str(unit.path),
+                                            "message": f"{unit.name} lacks {names}: {', '.join(sorted(missing))}"})
         for identifier, requirement in self.requirements.items():
             if requirement.verify is None:
                 diagnostics.append({"code": "OPEN_OBLIGATION", "message": f"{identifier} has no verification evidence binding", "severity": "warning", "location": self.locations[identifier]})

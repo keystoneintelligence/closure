@@ -54,6 +54,10 @@ class Engine:
         for identifier, datum in self.parameters.items():
             if datum.type == "artifact":
                 artifact = within(self.project.source_root(identifier), datum.path)
+                if artifact.is_file() and self.project.composition:
+                    with artifact.open("rb") as source:
+                        if source.readline(128).rstrip() == b"version https://git-lfs.github.com/spec/v1":
+                            raise ClosureError(f"Materialize the Git LFS input for {identifier}", "MISSING_INPUT", str(artifact))
                 if artifact.is_file():
                     self.values[identifier] = {"type": "artifact", "path": str(artifact), "sha256": file_digest(artifact), "name": artifact.name,
                                                "qualifiers": datum.qualifiers}
@@ -107,6 +111,9 @@ class Engine:
         identity = {"protocol": "closure-run/0.1", "engine": __version__, "analysis": identifier,
                     "contract": analysis.model_dump(), "sources": self.sources[identifier], "environment": self.environment,
                     "executable": {"path": executable, "sha256": file_digest(executable)}, "tools": self.tools[identifier], "inputs": identities, "context": self.context}
+        if self.project.composition:
+            unit = self.project.unit_for(identifier)
+            identity["project_source"] = unit.path.relative_to(self.project.workspace).as_posix()
         self.keys[identifier] = digest(identity)
         state, record = self.store.lookup(self.keys[identifier], self._slot(identifier))
         if analysis.run.uncontrolled_dependencies or (analysis.run.stochastic and analysis.run.seed is None):
@@ -413,7 +420,7 @@ def record_review(engine, identifier, decision, reviewer, reason):
         raise ClosureError("Unknown requirement", "UNKNOWN_REF")
     if decision == "accepted" and (assessment["verdict"] != "pass" or assessment["freshness"] != "current"):
         raise ClosureError("Acceptance requires current passing evidence", "REVIEW_INVALID")
-    if decision == "accepted" and not set(assessment["evidence_classes"]).issubset(engine.project.manifest.policy.accepted_evidence):
+    if decision == "accepted" and assessment["acceptance"] == "rejected":
         raise ClosureError("A review cannot override the policy's accepted evidence classes", "REVIEW_INVALID")
     if decision == "not_applicable" and assessment["applicability"] != "not_applicable":
         raise ClosureError("Applicable requirement cannot be reviewed as not applicable", "REVIEW_INVALID")

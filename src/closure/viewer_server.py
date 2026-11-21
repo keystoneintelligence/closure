@@ -19,7 +19,7 @@ from .project import Project
 from .reporting import explain_saved_report
 from . import __version__
 
-VIEWER_API = "closure-viewer/0.1"
+VIEWER_API = "closure-viewer/0.2"
 
 
 class LocalHTTPServer(ThreadingHTTPServer):
@@ -124,7 +124,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
             try:
                 if parsed.path == '/api/version':
                     return self.respond({"api":VIEWER_API,"implementation":__version__,
-                                         "source":"closure/0.1","runner":"closure-run/0.1",
+                                         "source":"closure/0.1","supported_sources":["closure/0.1","closure/0.2"],"runner":"closure-run/0.1",
                                          "execution":"trusted-local","trusted":app.trusted})
                 if parsed.path=="/api/project":
                     return self.respond(app.snapshot(query.get("scenario",[None])[0],query.get("configuration",[None])[0],query.get("report",[None])[0]))
