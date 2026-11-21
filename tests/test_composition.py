@@ -129,3 +129,30 @@ def test_claim_import_and_parent_evidence_policy(assembly):
     report = engine.verify(trusted=True)
     claim = next(row for row in report["requirements"] if row["id"] == "electronics::load.local_budget")
     assert claim["scoped"] and claim["acceptance"] == "rejected" and not report["gate"]
+
+def test_artifact_bytes_from_shared_project(assembly):
+    # Replace the synthetic profile with a declared data file consumed by both components.
+    path = assembly / "reference/project.yaml"
+    path.write_text(path.read_text().replace("profile.evaluate.power", "profile.dataset"))
+    path = assembly / "reference/model/load.yaml"
+    path.write_text("schema: closure/0.1\nmodule: profile\nowner: Test Engineering\n"
+                    "parameters: {dataset: {type: artifact, path: load.txt}}\n")
+    dataset = assembly / "reference/load.txt"
+    dataset.write_text("26")
+    for name in ("electronics", "cooling"):
+        model = assembly / name / "model/load.yaml"
+        model.write_text(model.read_text().replace('ref: "@reference", unit: W', 'ref: "@reference"'))
+        code = assembly / name / "scale.py"
+        code.write_text('from pathlib import Path\n' + code.read_text().replace('request["inputs"]["reference"]["value"]',
+                        'float(Path(request["inputs"]["reference"]["path"]).read_text())'))
+    first = Engine(assembly).verify(trusted=True)
+    assert first["values"]["system::budget.sum.total"]["value"] == 104
+    dataset.write_text("28")
+    second = Engine(assembly).verify(trusted=True)
+    assert len(second["executed"]) == 3 and second["values"]["system::budget.sum.total"]["value"] == 112
+    from closure.evidence import EvidenceStore
+    store = EvidenceStore(assembly)
+    original = first["analyses"][0]["record"]["inputs"]["reference"]
+    store.artifact_path(original).write_bytes(b"corrupt")
+    with pytest.raises(ClosureError, match="do not match"):
+        store.load_report(first["id"])
