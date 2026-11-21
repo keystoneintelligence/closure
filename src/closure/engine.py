@@ -132,6 +132,8 @@ class Engine:
         self.records[identifier] = record
         self.states[identifier] = "current"
         for name, value in record["outputs"].items():
+            if value.get("type") == "artifact":
+                value = {**value, "path": str(self.store.artifact_path(value))}
             self.values[f"{identifier}.{name}"] = value
 
     def plan(self):
