@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from .composition import Composition, manifest_path, workspace_root
 import graphlib
 import re
 from pathlib import Path
 from pydantic import ValidationError
 from .io import ClosureError, load_source, digest, file_digest, primitive, within
-from .models import Manifest, Module, Datum, Binding, Criterion
+from .models import CompositionManifest, Manifest, Module, Datum, Binding, Criterion
 from .units import compatible, convert
 
 
@@ -29,16 +30,14 @@ def source_location(document, section, key, path):
 
 
 class Project:
-    def __init__(self, path: str | Path):
-        path = Path(path).resolve()
-        self.root = path if path.is_dir() else path.parent
-        if path.is_dir():
-            manifests = [path / name for name in ("project.yaml", "project.yml", "project.json") if (path / name).is_file()]
-            if len(manifests) > 1:
-                raise ClosureError("Multiple project manifests; select one explicitly", "AMBIGUOUS_MANIFEST", str(path))
-            self.manifest_path = manifests[0] if manifests else path / "project.yaml"
-        else:
-            self.manifest_path = path
+    def __init__(self, path: str | Path, workspace=None):
+        self.manifest_path = manifest_path(path)
+        self.root = self.manifest_path.parent
+        self.boundary = Path(workspace).resolve() if workspace else None
+        if self.boundary and not self.manifest_path.is_relative_to(self.boundary):
+            raise ClosureError("Selected project escapes workspace", "PATH_ESCAPE")
+        self.workspace = workspace_root(self.manifest_path, self.boundary)
+        self.document_hashes = {}
         self.locations = {}
         self.documents = {}
         self.modules = {}
@@ -50,26 +49,23 @@ class Project:
         self.edges = []
         self.source_files = []
         self.manifest = self._load(self.manifest_path, Manifest)
-        for pattern in self.manifest.modules:
-            within(self.root, pattern)
-            for module_path in sorted(self.root.glob(pattern)):
-                if module_path in self.source_files:
-                    continue
-                module = self._load(module_path, Module)
-                if module.module in self.modules:
-                    raise ClosureError(f"Duplicate module {module.module}", "DUPLICATE_ID", str(module_path))
-                self.modules[module.module] = module
-                self.locations[module.module] = str(module_path)
-                for section, target in [("parameters", self.parameters), ("analyses", self.analyses), ("requirements", self.requirements)]:
-                    for local, value in getattr(module, section).items():
-                        self._identifier(local)
-                        qualified = f"{module.module}.{local}"
-                        if qualified in self.locations:
-                            raise ClosureError(f"Duplicate symbol {qualified}", "DUPLICATE_ID")
-                        target[qualified] = value
-                        self.locations[qualified] = source_location(self.documents[module_path], section, local, module_path)
-                        self.edges.append({"source": module.module, "target": qualified, "kind": "contains"})
-                self._identifier(module.module)
+        self.composition = (Composition(self, self.manifest, self.workspace)
+                            if isinstance(self.manifest, CompositionManifest) else None)
+        entries = self.composition.module_entries() if self.composition else self._local_modules()
+        for module_path, module in entries:
+            if module.module in self.modules:
+                raise ClosureError(f"Duplicate module {module.module}", "DUPLICATE_ID", str(module_path))
+            self.modules[module.module] = module
+            self.locations[module.module] = str(module_path)
+            for section, target in [("parameters", self.parameters), ("analyses", self.analyses), ("requirements", self.requirements)]:
+                for local, value in getattr(module, section).items():
+                    self._identifier(local)
+                    qualified = f"{module.module}.{local}"
+                    if qualified in self.locations:
+                        raise ClosureError(f"Duplicate symbol {qualified}", "DUPLICATE_ID")
+                    target[qualified] = value
+                    self.locations[qualified] = source_location(self.documents[module_path], section, local, module_path)
+                    self.edges.append({"source": module.module, "target": qualified, "kind": "contains"})
         if not self.modules:
             raise ClosureError("No module files matched", "EMPTY_PROJECT", str(self.manifest_path))
         for identifier, datum in self.parameters.items():
@@ -91,10 +87,35 @@ class Project:
             cycle = exc.args[1]
             raise ClosureError("Computational cycle: " + " -> ".join(cycle), "COMPUTE_CYCLE", self.locations[cycle[0]]) from exc
         self.scope = sorted(k for k, v in self.requirements.items() if v.required) if self.manifest.scope == ["*"] else self.manifest.scope
+        if self.composition:
+            self.scope = self.composition.scope(self.requirements)
+            for unit in self.composition.units.values():
+                for public, symbol in getattr(unit.manifest, "exports", {}).items():
+                    target = unit.qualify(symbol)
+                    if target not in self.ports and target not in self.requirements:
+                        raise ClosureError(f"Unknown export {unit.name}.{public}: {symbol}", "UNKNOWN_EXPORT", str(unit.path))
         for identifier in self.scope:
             if identifier not in self.requirements:
                 raise ClosureError(f"Unknown scoped requirement {identifier}", "UNKNOWN_REF")
-        self.source_hash = digest({str(p.relative_to(self.root)): file_digest(p) for p in self.source_files})
+        origin = self.workspace if self.composition else self.root
+        self.source_hash = digest({str(p.relative_to(origin)): value for p, value in self.document_hashes.items()})
+
+    def _local_modules(self):
+        for pattern in self.manifest.modules:
+            within(self.root, pattern)
+            for path in sorted(self.root.glob(pattern)):
+                path = within(self.root, path)
+                if path not in self.source_files:
+                    module = self._load(path, Module)
+                    self._identifier(module.module)
+                    yield path, module
+
+    def unit_for(self, identifier):
+        return self.composition.modules[identifier.split(".")[0]] if self.composition else None
+
+    def source_root(self, identifier):
+        unit = self.unit_for(identifier)
+        return unit.path.parent if unit else self.root
 
     @staticmethod
     def _identifier(value):
@@ -108,7 +129,13 @@ class Project:
                 "edges": self.edges, "protected_parameters": sorted(self.protected_parameters())}
 
     def _load(self, path, model):
+        before = file_digest(path) if path.is_file() else None
         document = load_source(path)
+        if before != file_digest(path):
+            raise ClosureError("Definition changed during loading", "SOURCE_CONFLICT", str(path))
+        self.document_hashes[path] = before
+        if model is Manifest and document.get("schema") == "closure/0.2":
+            model = CompositionManifest
         try:
             result = model.model_validate(primitive(document))
         except ValidationError as exc:
@@ -123,7 +150,8 @@ class Project:
         supplier = binding.ref.split(".")[0]
         if consumer.split(".")[0] != supplier:
             local = binding.ref[len(supplier) + 1:]
-            if local not in self.modules[supplier].exports:
+            external = self.composition and self.unit_for(consumer) is not self.unit_for(binding.ref)
+            if not external and local not in self.modules[supplier].exports:
                 raise ClosureError(f"{binding.ref} is private; add it to exports", "PRIVATE_REF", self.locations[consumer])
         try:
             compatible(self.ports[binding.ref], binding.unit, binding.qualifiers)
@@ -162,9 +190,9 @@ class Project:
                 if binding.ref in self.producers:
                     self.dependencies[identifier].add(self.producers[binding.ref])
             for source in analysis.run.sources:
-                within(self.root, source)
+                within(self.source_root(identifier), source)
             if analysis.run.environment_lock:
-                lock = within(self.root, analysis.run.environment_lock)
+                lock = within(self.source_root(identifier), analysis.run.environment_lock)
                 if not lock.is_file():
                     raise ClosureError(f"Missing environment lock {lock}", "MISSING_SOURCE", self.locations[identifier])
         for identifier, requirement in self.requirements.items():
@@ -178,11 +206,15 @@ class Project:
                 self.edges.append({"source": identifier, "target": parent, "kind": "derived_from"})
             if not requirement.applies_to or not requirement.configurations:
                 raise ClosureError(f"Empty applicability for {identifier}", "EMPTY_APPLICABILITY")
-            if set(requirement.applies_to) - set(self.manifest.scenarios) or set(requirement.configurations) - set(self.manifest.configurations):
+            owner = self.unit_for(identifier).manifest if self.composition else self.manifest
+            if set(requirement.applies_to) - set(owner.scenarios) or set(requirement.configurations) - set(owner.configurations):
                 raise ClosureError(f"Unknown requirement context for {identifier}", "UNKNOWN_CONTEXT")
-        for contexts in [self.manifest.scenarios, self.manifest.configurations]:
-            for context in contexts.values():
-                self.resolve_parameters(context.overrides)
+        owners = self.composition.units.values() if self.composition else [None]
+        for unit in owners:
+            manifest = unit.manifest if unit else self.manifest
+            for groups in (manifest.scenarios, manifest.configurations):
+                for context in groups.values():
+                    self.resolve_parameters({unit.qualify(k) if unit else k: v for k, v in context.overrides.items()})
 
     def resolve_parameters(self, overrides=None):
         values = dict(self.parameters)
