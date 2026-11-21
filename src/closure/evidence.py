@@ -16,7 +16,7 @@ from pathlib import Path
 from .io import ClosureError, atomic_json, canonical, digest, file_digest, read_json, within
 from .units import validate_value
 from .processes import managed_process
-from .protocol import validate_report, EvidenceRecord, Report, RunnerRequest, RunnerResponse
+from .protocol import validate_report, EvidenceRecord, RunnerRequest, RunnerResponse
 
 
 def utcnow():

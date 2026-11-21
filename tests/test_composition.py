@@ -1,5 +1,6 @@
 """End-to-end checks for the generic, four-project power example."""
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -76,3 +77,55 @@ def test_upward_definition_and_lateral_result(assembly):
     with pytest.raises(ClosureError, match="Computational cycle"):
         Project(component)
 
+
+def test_git_identity_and_dependency_reuse(assembly):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=assembly, text=True).strip()
+
+    git("init", "-q")
+    git("add", ".")
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Power allocations")
+    initial = Engine(assembly).verify(trusted=True)
+    assert initial["revision"] == {"state": "committed inputs", "commit": git("rev-parse", "HEAD"), "files": []}
+    (assembly / "notes.md").write_text("Documentation")
+    unchanged = Engine(assembly).verify(trusted=True)
+    assert unchanged["executed"] == []
+    code = assembly / "cooling/scale.py"
+    code.write_text(code.read_text() + "# Updated implementation\n")
+    changed = Engine(assembly).verify(trusted=True)
+    assert changed["revision"]["files"] == ["cooling/scale.py"]
+    assert changed["executed"] == ["cooling::load.scale", "system::budget.sum"]
+    from closure.comparison import compare_git
+    diff = compare_git(Project(assembly / "cooling"), "HEAD")
+    assert diff["affected_analyses"] == ["cooling::load.scale"]
+
+
+def test_import_contracts_empty_groups_and_context(assembly):
+    path = assembly / "project.yaml"
+    original = path.read_text()
+    path.write_text(original.replace("export: demand}", "export: demand, port: {type: boolean}}"))
+    with pytest.raises(ClosureError, match="incompatible type"):
+        Project(assembly)
+    path.write_text(original.replace("export: demand}", "export: demand, port: {type: quantity, unit: kg}}"))
+    with pytest.raises(ClosureError, match="Cannot convert"):
+        Project(assembly)
+    path.write_text(original + "scenarios: {nominal: {}, hot: {}}\n")
+    assert not Project(assembly).check()["valid"]
+    with pytest.raises(ClosureError, match="does not declare hot"):
+        Engine(assembly, scenario="hot")
+    path.write_text(original.replace("  cooling: {path: cooling}", "  cooling: {path: cooling}\n  reference: {path: reference}"))
+    report = Engine(assembly).verify(trusted=True)
+    assert not report["gate"] and "No applicable obligations" in report["gates"]["reference"]["reasons"]
+
+
+def test_claim_import_and_parent_evidence_policy(assembly):
+    supplier = assembly / "electronics/project.yaml"
+    supplier.write_text(supplier.read_text().replace("load.scale.demand}", "load.scale.demand, qualified: load.local_budget}"))
+    path = assembly / "project.yaml"
+    path.write_text(path.read_text().replace("  electronics: {path: electronics}", "") +
+                    "  evidence: {path: electronics, export: qualified}\nrequired_claims: [evidence]\n"
+                    "policy: {accepted_evidence: [measured]}\n")
+    engine = Engine(assembly)
+    report = engine.verify(trusted=True)
+    claim = next(row for row in report["requirements"] if row["id"] == "electronics::load.local_budget")
+    assert claim["scoped"] and claim["acceptance"] == "rejected" and not report["gate"]

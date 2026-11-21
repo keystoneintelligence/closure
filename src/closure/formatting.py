@@ -13,10 +13,12 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .io import ClosureError, load_source, primitive
-from .models import Manifest, Module, Study
+from .models import CompositionManifest, Manifest, Module, Study
 
 
 def source_model(document):
+    if document.get("schema") == "closure/0.2" and "project" in document:
+        return CompositionManifest
     for key, model in (("module", Module), ("project", Manifest), ("study", Study)):
         if key in document:
             return model
@@ -115,7 +117,8 @@ def format_project(path, check=False):
     project = Project(path)
     # Conventional study directory only; never traverse evidence, reports or
     # arbitrary simulator YAML. Each selected study must validate as Closure.
-    sources = list(project.source_files)
+    sources = ([project.manifest_path, *(path for path, _ in project.composition.root.modules)]
+               if project.composition else list(project.source_files))
     studies = project.root / "studies"
     if studies.is_dir():
         sources += sorted(p for p in studies.rglob("*") if p.suffix.lower() in (".yaml", ".yml", ".json"))

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from .io import ClosureError
@@ -21,8 +22,11 @@ def revision(workspace, files):
         tracked = set(git("ls-files", "--full-name", "-z", "--", ".").split("\0"))
         changed = set(git("diff", "--name-only", "--no-renames", "--no-ext-diff", "-z", "HEAD", "--", ".").split("\0"))
         evaluated = {p.relative_to(top).as_posix() for p in files if p.is_relative_to(top)}
-        local = sorted((evaluated - tracked) | (evaluated & changed))
-        return {"state": "local changes" if local else "committed inputs", "commit": commit, "files": local}
+        present = {p.relative_to(top).as_posix() for p, value in files.items() if value is not None and p.is_relative_to(top)}
+        local = sorted((present - tracked) | (evaluated & changed))
+        worktree = git("-C", str(top), "status", "--porcelain=v1", "-z", "--untracked-files=normal",
+                       "--", ".", ":(exclude,glob)**/.closure/**", ":(exclude,glob).closure/**")
+        return {"state": "local changes" if local or worktree else "committed inputs", "commit": commit, "files": local}
     except (OSError, ValueError):
         return {"state": "local snapshot", "commit": None, "files": []}
 
@@ -52,7 +56,7 @@ def contract_changes(before, after, path=""):
     if isinstance(before, dict) and isinstance(after, dict):
         return [line for key in sorted(before.keys() | after.keys())
                 for line in contract_changes(before.get(key), after.get(key), f"{path}.{key}" if path else key)]
-    return [f"{path}: {before} → {after}"]
+    return [f"{path}: {before} â†’ {after}"]
 
 
 def compare_reports(before, after):
@@ -70,7 +74,9 @@ def compare_reports(before, after):
             detail = []
             for field in ("status", "text", "owner", "acceptance", "scoped"):
                 if old[field] != new[field]:
-                    detail.append(f"{field} changed from {old[field]} to {new[field]}")
+                    def label(value):
+                        return str(value).replace("_", " ")
+                    detail.append(f"{field} changed from {label(old[field])} to {label(new[field])}")
             for left, right in zip(old["comparisons"], new["comparisons"]):
                 changed = False
                 for field in ("actual", "limit", "margin", "op", "ref"):
@@ -80,7 +86,8 @@ def compare_reports(before, after):
                 if changed and left["actual"] == right["actual"] and left.get("unit") == right.get("unit"):
                     detail.append(f"calculated value stayed at {display(right['actual'], right.get('unit'))}")
             if detail:
-                changes.append(f"{key} ({new['owner']}): " + ". ".join(detail) + ".")
+                title = new["text"].rstrip(".")
+                changes.append(f"{title} ({new['owner']}). " + ". ".join(part[0].upper() + part[1:] for part in detail) + ".")
         for name in sorted(before.get("projects", {}).keys() | after.get("projects", {}).keys()):
             a, b = before.get("projects", {}).get(name, {}), after.get("projects", {}).get(name, {})
             for field in ("owned", "children", "imports", "exports", "scope", "policy", "excluded_children"):
@@ -93,14 +100,22 @@ def compare_reports(before, after):
         if analysis["state"] != "current" or not record:
             reason = (analysis.get("error") or {}).get("message") or f"Evidence is {analysis['state']}."
         elif key not in after["executed"]:
-            reason = f"Reused the verified run from {record['finished_at']}. Declared dependencies and execution context matched."
+            finished = datetime.fromisoformat(record["finished_at"]).strftime("%d %b %Y, %H:%M UTC")
+            reason = f"Reused the verified run from {finished}. Inputs, code and execution context matched."
         else:
             old = old_runs.get(key)
             differences = []
             if old:
                 for field in ("sources", "inputs", "upstream", "tools", "settings", "environment"):
                     left, right = old[field], record[field]
-                    differences.extend(f"{field}: {name}" for name in sorted(left.keys() | right.keys()) if left.get(name) != right.get(name))
+                    for name in sorted(left.keys() | right.keys()):
+                        if left.get(name) == right.get(name):
+                            continue
+                        if field == "inputs" and name in left and name in right and "value" in left[name] and "value" in right[name]:
+                            a, b = left[name], right[name]
+                            differences.append(f"{name} ({display(a['value'], a.get('unit'))} to {display(b['value'], b.get('unit'))})")
+                        else:
+                            differences.append(f"{field}: {name}")
                 for field in ("command", "seed"):
                     if old[field] != record[field]:
                         differences.append(field)

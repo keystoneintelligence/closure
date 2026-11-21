@@ -1,7 +1,7 @@
 {
   "name": "closure-viewer",
   "private": true,
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "type": "module",
   "scripts": {
     "build": "esbuild viewer.js --bundle --format=esm --minify --outfile=../src/closure/viewer/app.js",

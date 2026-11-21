@@ -1,4 +1,4 @@
-export const VIEWER_API = 'closure-viewer/0.1';
+export const VIEWER_API = 'closure-viewer/0.2';
 
 export async function requestJSON(path, body, token = '', transport = fetch) {
   const headers = {'X-Closure-API': VIEWER_API};

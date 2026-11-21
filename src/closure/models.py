@@ -170,6 +170,7 @@ class ChildProject(Contract):
 class ProjectImport(Contract):
     path: str = Field(min_length=1)
     export: str = Field(min_length=1)
+    port: Port | None = None
 
 
 class CompositionManifest(Manifest):
