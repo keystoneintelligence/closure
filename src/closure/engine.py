@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 from . import __version__
+from .assessment_history import compare_reports, contract_changes, previous_report, revision
 from .evidence import EvidenceStore, environment_identity, resolve_executable, source_snapshot, tool_identity, utcnow
 from .io import ClosureError, atomic_json, digest, file_digest, load_source, read_json, within
 from .models import Binding, Criterion, Datum, Study
@@ -48,6 +49,8 @@ class Engine:
         self.tools = {}
         self.failures = {}
         self.executed = []
+        self.pinned_sources = None
+        self.revision = None
         for identifier, datum in self.parameters.items():
             if datum.type == "artifact":
                 artifact = within(self.project.source_root(identifier), datum.path)
@@ -88,6 +91,8 @@ class Engine:
     def _prepare(self, identifier):
         analysis = self.project.analyses[identifier]
         self.sources[identifier] = source_snapshot(self.project, analysis, self.project.source_root(identifier))
+        if self.pinned_sources is not None and self.sources[identifier] != self.pinned_sources[identifier]:
+            raise ClosureError("Analysis sources changed during verification", "SOURCE_CONFLICT", identifier)
         identities = {}
         bindings = list(analysis.inputs.values()) + [ref for c in analysis.valid_when for ref in refs(c)]
         for binding in bindings:
@@ -141,7 +146,40 @@ class Engine:
         with project_lock(self.project.root):
             if Project(self.project.manifest_path, self.project.boundary).source_hash != self.project.source_hash:
                 raise ClosureError("Project source changed after this engine was prepared", "SOURCE_CONFLICT")
+            if self.project.composition:
+                self.pinned_sources, self.input_files = self.invocation_inputs()
+                self.revision = revision(self.project.workspace, self.input_files)
             return self._build(force=force, progress=progress)
+
+    def invocation_inputs(self):
+        files = dict(self.project.document_hashes)
+        sources = {}
+        for key in self.project.order:
+            root = self.project.source_root(key)
+            try:
+                sources[key] = source_snapshot(self.project, self.project.analyses[key], root)
+            except ClosureError:
+                sources[key] = None  # The planner reports the specific missing input.
+            files.update({root / path: value for path, value in (sources[key] or {}).items()})
+            for path in self.project.analyses[key].run.tool_files:
+                target = (root / path).resolve()
+                files[target] = file_digest(target) if target.is_file() else None
+        for key, parameter in self.parameters.items():
+            if parameter.type == "artifact":
+                path = within(self.project.source_root(key), parameter.path)
+                checksum = file_digest(path) if path.is_file() else None
+                if checksum != self.values.get(key, {}).get("sha256"):
+                    raise ClosureError(f"Input changed since loading: {key}", "SOURCE_CONFLICT")
+                files[path] = checksum
+        for unit in self.project.composition.units.values():
+            root = unit.path.parent
+            review_files = [within(root, unit.manifest.baseline)]
+            for pattern in unit.manifest.reviews:
+                within(root, pattern)
+                review_files.extend(within(root, p) for p in root.glob(pattern))
+            for path in review_files:
+                files[path] = file_digest(path) if path.is_file() else None
+        return sources, files
 
     def _build(self, force=False, progress=None):
         def notify(event, **details):
@@ -185,6 +223,13 @@ class Engine:
                 self.states[identifier] = "blocked" if exc.code in ("BLOCKED", "INVALID_DOMAIN", "MISSING_INPUT") else "error"
                 notify(self.states[identifier], error=exc.as_dict())
         report = self.report()
+        if self.project.composition:
+            current = Project(self.project.manifest_path, self.project.boundary)
+            if (current.source_hash != self.project.source_hash or self.invocation_inputs() != (self.pinned_sources, self.input_files)
+                    or revision(self.project.workspace, self.input_files) != self.revision):
+                raise ClosureError("Inputs or revision changed during verification; retry", "SOURCE_CONFLICT")
+            report["revision"] = self.revision
+            report["comparison"] = compare_reports(previous_report(self.store, report), report)
         return self.store.save_report(report)
 
     def baseline(self, project=None):
@@ -319,6 +364,9 @@ class Engine:
                                 "Modelled performance requires corresponding validation or test evidence before being treated as observed performance.",
                                 "Local analyses execute trusted code; host and undeclared external dependencies are not isolated."]}
         if composition:
+            if baseline["status"] == "changed":
+                approved = read_json(within(self.project.root, self.project.manifest.baseline))
+                report["baseline_changes"] = contract_changes(approved.get("contract", {}), self.project.obligation_contract())
             gates = composition.gates(assessments, baselines, self.project.requirements)
             report.update(schema="closure-report/0.2", projects=composition.describe(), gates=gates,
                           gate=gates[composition.root.name]["gate"])

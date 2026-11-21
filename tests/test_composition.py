@@ -28,6 +28,11 @@ def test_shared_execution_and_local_acceptance(assembly):
     changed = Engine(assembly).verify(trusted=True)
     assert changed["executed"] == [] and not changed["gate"]
     assert changed["gates"]["electronics"]["gate"] and changed["gates"]["cooling"]["gate"]
+    comparison = changed["comparison"]
+    assert comparison["previous"] == first["id"]
+    assert any("110 W to 100 W" in line and "104 W" in line for line in comparison["changes"])
+    assert all("Reused" in decision["reason"] for decision in comparison["decisions"])
+    assert any("maximum" in line for line in changed["baseline_changes"])
     assert changed["requirements"][0]["comparisons"][0]["margin"] == -4
     independent = Engine(assembly / "electronics").verify(trusted=True)
     assert independent["gate"] and len(independent["executed"]) == 2

@@ -80,6 +80,21 @@ def export_report(engine, destination, report_id=None):
                         f"<td>{comparisons or 'No current comparison'}</td><td>{'Included' if requirement['scoped'] else 'Excluded'}</td></tr>")
         links = "".join(f'<li><a href="{quote(a["file"])}">{esc(a["id"])}</a><br><small>{esc(a["sha256"])}</small></li>' for a in artifacts)
         assumptions = "".join(f"<li>{esc(a['id'])}: {esc(a['rationale'])}</li>" for a in report.get("assumptions", []))
+        history = []
+        if report.get("gates"):
+            history.append("<h2>Project assessments</h2><ul>")
+            for name, gate in report["gates"].items():
+                state = "PASS" if gate["gate"] else "OPEN: " + ", ".join(gate["reasons"])
+                history.append(f"<li>{esc(name)} — {esc(state)}</li>")
+            history.append("</ul>")
+        if report.get("comparison"):
+            comparison = report["comparison"]
+            history.append("<h2>Assessment history</h2><p>" + esc(comparison["previous_date"] or "First verification") + "</p>")
+            lines = [*comparison["changes"], *(f"{r['analysis']}: {r['reason']}" for r in comparison["decisions"])]
+            history.append("<ul>" + "".join(f"<li>{esc(line)}</li>" for line in lines) + "</ul>")
+        if report.get("baseline_changes"):
+            history.append("<h2>Changes since obligation review</h2><ul>" +
+                           "".join(f"<li>{esc(line)}</li>" for line in report["baseline_changes"]) + "</ul>")
         page = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(report['name'])} — Closure evidence report</title><style>
 body{{font:16px/1.55 system-ui,sans-serif;background:#edf3f6;color:#203949;margin:0;padding:40px}}main{{max-width:1100px;margin:auto}}
@@ -92,6 +107,7 @@ Policy: {esc(report['policy']['name'])} · {esc(report['context']['configuration
 {esc(report['baseline']['message'])}</div><p><strong>{'Historical build snapshot' if report_id else 'Current plan snapshot'}</strong> · {esc(report['created_at'])}<br>
 This report records support at the stated time and context. Re-plan the source project to check current support.
 {'Its report digest and artifact hashes were checked during export.' if report_id else ''}</p>
+{''.join(history)}
 <h2>Requirements and declared scope</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Comparison</th><th>Scope</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
 <h2>Artifacts</h2><ul>{links or '<li>No current artifact evidence.</li>'}</ul><h2>Assumptions</h2><ul>{assumptions or '<li>See source contracts and the JSON report.</li>'}</ul>
 <h2>Limitations</h2><ul>{''.join('<li>'+esc(x)+'</li>' for x in report['limitations'])}</ul>
