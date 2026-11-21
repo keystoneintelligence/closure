@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from .io import ClosureError, load_source
 from .formatting import render_source
@@ -26,10 +26,13 @@ def project_lock(root: Path):
         lock.unlink(missing_ok=True)
 
 
-def patch_parameters(path, expected_source_hash, changes):
-    root = Project(path).root
-    with project_lock(root):
-        project = Project(path)
+def patch_parameters(path, expected_source_hash, changes, workspace=None):
+    selected = Project(path, workspace)
+    with ExitStack() as locks:
+        roots = {selected.root, *(selected.source_root(key) for key in changes if key in selected.parameters)}
+        for root in sorted(roots):
+            locks.enter_context(project_lock(root))
+        project = Project(path, workspace)
         if project.source_hash != expected_source_hash:
             raise ClosureError("Source changed since this patch was prepared", "SOURCE_CONFLICT")
         overrides = {identifier: Datum.model_validate(value) for identifier, value in changes.items()}
@@ -52,7 +55,7 @@ def patch_parameters(path, expected_source_hash, changes):
                 temporary = file_path.with_suffix(file_path.suffix + ".closure-tmp")
                 temporary.write_bytes(text.encode("utf-8"))
                 os.replace(temporary, file_path)
-            revised = Project(path)
+            revised = Project(path, workspace)
         except Exception:
             for file_path, data in originals.items():
                 file_path.write_bytes(data)

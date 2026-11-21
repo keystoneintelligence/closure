@@ -14,6 +14,8 @@ with tempfile.TemporaryDirectory(prefix='closure-browser-') as scratch:
     shutil.copytree(ROOT/'examples/service', project,
                     ignore=shutil.ignore_patterns('.closure', '__pycache__', 'deliverables', 'reviews'))
     approve_baseline(Project(project), 'Browser fixture', 'Synthetic service example')
+    shutil.copytree(ROOT/"examples/composed-power", Path(scratch)/"composed-power",
+                    ignore=shutil.ignore_patterns(".closure", "__pycache__"))
     server = create_server(project, port=0, workspace=scratch, trusted=True)
     print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}'}), flush=True)
     try:
