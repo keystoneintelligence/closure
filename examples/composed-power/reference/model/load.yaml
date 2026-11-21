@@ -1,0 +1,9 @@
+schema: closure/0.1
+module: profile
+owner: Test Engineering
+parameters: {reference: {value: 26, unit: W}}
+analyses:
+  evaluate:
+    run: {argv: [python, evaluate.py], sources: [evaluate.py]}
+    inputs: {reference: {ref: profile.reference}}
+    outputs: {power: {type: quantity, unit: W}}

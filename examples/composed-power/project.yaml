@@ -1,0 +1,9 @@
+schema: closure/0.2
+project: system
+name: Assembly power budget
+children:
+  electronics: {path: electronics}
+  cooling: {path: cooling}
+imports:
+  board: {path: electronics, export: demand}
+  fan: {path: cooling, export: demand}
