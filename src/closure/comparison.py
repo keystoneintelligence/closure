@@ -76,7 +76,7 @@ def compare_git(project: Project, ref: str):
                     snapshots.append({})
                 else:
                     try:
-                        snapshots.append(source_snapshot(version, version.analyses[identifier]))
+                        snapshots.append(source_snapshot(version, version.analyses[identifier], version.source_root(identifier)))
                     except ClosureError as exc:
                         raise ClosureError(f"Cannot compare {identifier}: {exc}", "BASE_SOURCE") from exc
             # Git normalizes tracked text (e.g. Windows autocrlf). Its change set
@@ -91,7 +91,7 @@ def compare_git(project: Project, ref: str):
             hashes = []
             for version in (base, project):
                 datum = version.parameters.get(identifier)
-                path = within(version.root, datum.path) if datum and datum.type == "artifact" else None
+                path = within(version.source_root(identifier), datum.path) if datum and datum.type == "artifact" else None
                 hashes.append(file_digest(path) if path and path.is_file() else None)
             if hashes[0] != hashes[1]:
                 artifact_changes.append({"id": identifier, "before": hashes[0], "after": hashes[1]})

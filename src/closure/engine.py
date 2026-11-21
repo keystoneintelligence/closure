@@ -32,6 +32,16 @@ class Engine:
         if set(overrides or {}) & self.project.protected_parameters():
             raise ClosureError("Study or ad hoc overrides cannot alter inputs that define requirement limits; propose and review an obligation change", "OBLIGATION_CHANGE")
         combined = {**manifest.configurations[configuration].overrides, **manifest.scenarios[scenario].overrides, **(overrides or {})}
+        if self.project.composition:
+            combined = {}
+            for unit in self.project.composition.units.values():
+                if scenario not in unit.manifest.scenarios or configuration not in unit.manifest.configurations:
+                    raise ClosureError(f"{unit.name} does not declare {scenario} / {configuration}",
+                                       "UNKNOWN_CONTEXT", str(unit.path))
+                local = {**unit.manifest.configurations[configuration].overrides,
+                         **unit.manifest.scenarios[scenario].overrides}
+                combined.update({unit.qualify(k): v for k, v in local.items()})
+            combined.update(overrides or {})
         self.parameters = self.project.resolve_parameters(combined)
         self.environment = environment_identity()
         self.states, self.records, self.keys, self.sources, self.values = {}, {}, {}, {}, {}
@@ -40,7 +50,7 @@ class Engine:
         self.executed = []
         for identifier, datum in self.parameters.items():
             if datum.type == "artifact":
-                artifact = within(self.project.root, datum.path)
+                artifact = within(self.project.source_root(identifier), datum.path)
                 if artifact.is_file():
                     self.values[identifier] = {"type": "artifact", "path": str(artifact), "sha256": file_digest(artifact), "name": artifact.name,
                                                "qualifiers": datum.qualifiers}
@@ -77,7 +87,7 @@ class Engine:
 
     def _prepare(self, identifier):
         analysis = self.project.analyses[identifier]
-        self.sources[identifier] = source_snapshot(self.project, analysis)
+        self.sources[identifier] = source_snapshot(self.project, analysis, self.project.source_root(identifier))
         identities = {}
         bindings = list(analysis.inputs.values()) + [ref for c in analysis.valid_when for ref in refs(c)]
         for binding in bindings:
@@ -88,7 +98,7 @@ class Engine:
                 producer = self.project.producers[binding.ref]
                 identities[binding.ref] = {"producer": self.keys.get(producer), "run": self.records.get(producer, {}).get("record_hash")}
         executable = resolve_executable(analysis.run.argv)[0]
-        self.tools[identifier] = tool_identity(analysis.run, self.project.root)
+        self.tools[identifier] = tool_identity(analysis.run, self.project.source_root(identifier))
         identity = {"protocol": "closure-run/0.1", "engine": __version__, "analysis": identifier,
                     "contract": analysis.model_dump(), "sources": self.sources[identifier], "environment": self.environment,
                     "executable": {"path": executable, "sha256": file_digest(executable)}, "tools": self.tools[identifier], "inputs": identities, "context": self.context}
@@ -129,7 +139,7 @@ class Engine:
         if not trusted:
             raise ClosureError("Execution requires explicit trusted=True or --trusted", "TRUST_REQUIRED")
         with project_lock(self.project.root):
-            if Project(self.project.manifest_path).source_hash != self.project.source_hash:
+            if Project(self.project.manifest_path, self.project.boundary).source_hash != self.project.source_hash:
                 raise ClosureError("Project source changed after this engine was prepared", "SOURCE_CONFLICT")
             return self._build(force=force, progress=progress)
 

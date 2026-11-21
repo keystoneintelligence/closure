@@ -1,0 +1,16 @@
+schema: closure/0.1
+module: budget
+owner: System Engineering
+parameters:
+  maximum: {value: 110, unit: W}
+analyses:
+  sum:
+    run: {argv: [python, sum.py], sources: [sum.py]}
+    inputs:
+      board: {ref: "@board", unit: W}
+      fan: {ref: "@fan", unit: W}
+    outputs: {total: {type: quantity, unit: W}}
+requirements:
+  power:
+    text: Total electrical demand fits the assembly power budget.
+    verify: {actual: {ref: budget.sum.total}, op: lte, limit: {ref: budget.maximum}}
