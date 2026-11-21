@@ -97,6 +97,18 @@ class Project:
         for identifier in self.scope:
             if identifier not in self.requirements:
                 raise ClosureError(f"Unknown scoped requirement {identifier}", "UNKNOWN_REF")
+        if self.composition:
+            # Schedule only producers reachable from selected obligations.
+            pending = [self.producers[b.ref] for key in self.scope
+                       for condition in criteria(self.requirements[key].verify)
+                       for b in refs(condition) if b.ref in self.producers]
+            needed = set()
+            while pending:
+                analysis = pending.pop()
+                if analysis not in needed:
+                    needed.add(analysis)
+                    pending.extend(self.dependencies[analysis])
+            self.order = [key for key in self.order if key in needed]
         origin = self.workspace if self.composition else self.root
         self.source_hash = digest({str(p.relative_to(origin)): value for p, value in self.document_hashes.items()})
 

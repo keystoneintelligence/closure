@@ -1,0 +1,12 @@
+schema: closure/0.1
+module: load
+owner: Cooling
+analyses:
+  scale:
+    run: {argv: [python, scale.py], sources: [scale.py]}
+    inputs: {reference: {ref: "@reference", unit: W}}
+    outputs: {demand: {type: quantity, unit: W}}
+requirements:
+  local_budget:
+    text: Component demand is within its 60 W allocation.
+    verify: {actual: {ref: load.scale.demand}, op: lte, limit: {value: 60, unit: W}}
