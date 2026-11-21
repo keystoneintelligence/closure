@@ -246,6 +246,17 @@ class Project:
 
     def obligation_contract(self):
         protected = self.protected_parameters()
+        if self.composition:
+            included = set(self.scope)
+            units = self.composition.describe()
+            return {"scope": self.scope, "projects": units,
+                    "requirements": {k: self.requirements[k].model_dump() for k in sorted(included)},
+                    "limit_inputs": {k: self.parameters[k].model_dump() for k in sorted(protected)},
+                    "contexts": {u.name: {group: {name: {k: v.model_dump() for k, v in context.overrides.items()
+                                                          if u.qualify(k) in protected}
+                                                   for name, context in getattr(u.manifest, group).items()}
+                                          for group in ("scenarios", "configurations")}
+                                 for u in self.composition.units.values()}}
         return {"requirements": {k: v.model_dump() for k, v in self.requirements.items()}, "scope": self.scope,
                 "scenarios": sorted(self.manifest.scenarios), "configurations": sorted(self.manifest.configurations),
                 "policy": self.manifest.policy.model_dump(),

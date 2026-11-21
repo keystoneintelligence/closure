@@ -16,7 +16,7 @@ from pathlib import Path
 from .io import ClosureError, atomic_json, canonical, digest, file_digest, read_json, within
 from .units import validate_value
 from .processes import managed_process
-from .protocol import EvidenceRecord, Report, RunnerRequest, RunnerResponse
+from .protocol import validate_report, EvidenceRecord, Report, RunnerRequest, RunnerResponse
 
 
 def utcnow():
@@ -185,7 +185,7 @@ class EvidenceStore:
 
     def save_report(self, report):
         report = json.loads(canonical({**report, "report_hash": digest(report)}))
-        Report.model_validate(report)
+        validate_report(report)
         path = self.root / "reports" / f"{report['id']}.json"
         if path.exists():
             raise ClosureError("Report identity collision", "RECORD_COLLISION")
@@ -198,9 +198,9 @@ class EvidenceStore:
         if "report_hash" not in report or "model" not in report:
             raise ClosureError("This legacy report has no sealed model snapshot. Its individual run records remain inspectable; build again to create a full snapshot.", "REPORT_UNSEALED")
         try:
-            Report.model_validate(report)
+            validate_report(report)
             body = {k: v for k, v in report.items() if k != "report_hash"}
-            if report.get("schema") != "closure-report/0.1" or digest(body) != report["report_hash"]:
+            if digest(body) != report["report_hash"]:
                 raise ValueError("report digest mismatch")
             for analysis in report["analyses"]:
                 if analysis.get("record"):
