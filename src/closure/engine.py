@@ -4,12 +4,14 @@ from __future__ import annotations
 import fnmatch
 import itertools
 import operator
+import errno
 import time
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 from . import __version__
 from .assessment_history import compare_reports, contract_changes, previous_report, revision
-from .evidence import EvidenceStore, environment_identity, resolve_executable, source_snapshot, tool_identity, utcnow
+from .evidence import EvidenceStore, environment_identity, limit_tools, resolve_executable, source_snapshot, tool_identity, utcnow
 from .io import ClosureError, atomic_json, digest, file_digest, load_source, read_json, within
 from .models import Binding, Criterion, Datum, Study
 from .protocol import validate_report, StudyResult
@@ -24,6 +26,16 @@ class Engine:
     def __init__(self, project: Project | str | Path, scenario=None, configuration=None, overrides=None, point="baseline"):
         self.project = project if isinstance(project, Project) else Project(project)
         self.store = EvidenceStore(self.project.root)
+        stores = {self.project.root: self.store}
+        self.owner_stores = {}
+        for key in self.project.order:
+            root = self.project.source_root(key)
+            if root not in stores:
+                stores[root] = EvidenceStore(root)
+            self.owner_stores[key] = stores[root]
+        self.run_stores = dict(self.owner_stores)
+        self.record_stores = {}
+        self.owner_versions = {}
         manifest = self.project.manifest
         scenario = scenario if scenario is not None else next(iter(manifest.scenarios), None)
         configuration = configuration if configuration is not None else next(iter(manifest.configurations), None)
@@ -65,7 +77,7 @@ class Engine:
                 self.values[identifier] = {"value": datum.value, "unit": datum.unit, "type": datum.type, "qualifiers": datum.qualifiers}
 
     def _slot(self, identifier):
-        return digest({"analysis": identifier, "context": self.context})
+        return digest({"analysis": self.project.evidence_id(identifier), "context": self.context})
 
     def _binding_value(self, binding):
         value = dict(self.values[binding.ref])
@@ -94,28 +106,48 @@ class Engine:
 
     def _prepare(self, identifier):
         analysis = self.project.analyses[identifier]
+        self.records.pop(identifier, None)
+        self.record_stores.pop(identifier, None)
+        self.failures.pop(identifier, None)
+        for name in analysis.outputs:
+            self.values.pop(f"{identifier}.{name}", None)
         self.sources[identifier] = source_snapshot(self.project, analysis, self.project.source_root(identifier))
         if self.pinned_sources is not None and self.sources[identifier] != self.pinned_sources[identifier]:
             raise ClosureError("Analysis sources changed during verification", "SOURCE_CONFLICT", identifier)
         identities = {}
         bindings = list(analysis.inputs.values()) + [ref for c in analysis.valid_when for ref in refs(c)]
         for binding in bindings:
+            name = self.project.evidence_id(binding.ref, identifier)
             if binding.ref in self.parameters:
                 parameter = self.parameters[binding.ref]
-                identities[binding.ref] = {"source": parameter.model_dump(), "resolved": self.values.get(binding.ref)}
+                resolved = self.values.get(binding.ref)
+                if resolved and parameter.type == "artifact":
+                    # The runner consumes staged bytes under their original name.
+                    resolved = {field: value for field, value in resolved.items() if field != "path"}
+                identities[name] = {"source": parameter.model_dump(), "resolved": resolved}
             else:
                 producer = self.project.producers[binding.ref]
-                identities[binding.ref] = {"producer": self.keys.get(producer), "run": self.records.get(producer, {}).get("record_hash")}
+                identities[name] = {"producer": self.keys.get(producer), "run": self.records.get(producer, {}).get("record_hash")}
         executable = resolve_executable(analysis.run.argv)[0]
         self.tools[identifier] = tool_identity(analysis.run, self.project.source_root(identifier))
-        identity = {"protocol": "closure-run/0.1", "engine": __version__, "analysis": identifier,
-                    "contract": analysis.model_dump(), "sources": self.sources[identifier], "environment": self.environment,
+        native_id = self.project.evidence_id(identifier)
+        unit = self.project.unit_for(identifier)
+        identity = {"protocol": "closure-run/0.1", "engine": __version__, "analysis": native_id,
+                    "project": unit.name if unit else self.project.manifest.project,
+                    "contract": self.project.native_contracts.get(identifier, analysis.model_dump()), "sources": self.sources[identifier], "environment": self.environment,
                     "executable": {"path": executable, "sha256": file_digest(executable)}, "tools": self.tools[identifier], "inputs": identities, "context": self.context}
-        if self.project.composition:
-            unit = self.project.unit_for(identifier)
-            identity["project_source"] = unit.path.relative_to(self.project.workspace).as_posix()
         self.keys[identifier] = digest(identity)
-        state, record = self.store.lookup(self.keys[identifier], self._slot(identifier))
+        key, slot = self.keys[identifier], self._slot(identifier)
+        store = self.owner_stores[identifier]
+        if store.root != self.store.root:
+            # A read-only mount may only reveal its permissions when the first write fails.
+            # A locally retained run stays active until the owner publishes or withdraws its run.
+            owner_version = {"source": store.root.parent.relative_to(self.project.workspace).as_posix(),
+                             "run": store.active_version(key)}
+            self.owner_versions[identifier] = owner_version
+            if self.store.index().get("local_fallbacks", {}).get(key) == owner_version:
+                store = self.store
+        state, record = store.lookup(key, slot)
         if analysis.run.uncontrolled_dependencies or (analysis.run.stochastic and analysis.run.seed is None):
             state, record = "stale" if state == "current" else state, None
         blocked = any(self.states.get(dependency) != "current" for dependency in self.project.dependencies[identifier])
@@ -123,20 +155,22 @@ class Engine:
             state, record = "stale" if state == "current" else state, None
         self.states[identifier] = state
         if record:
-            if record["context"] != self.context or record["analysis"] != identifier:
+            if record["context"] != self.context or record["analysis"] != native_id:
                 self.states[identifier] = "missing"
             else:
-                self._use_record(identifier, record)
+                self._use_record(identifier, record, store)
 
-    def _use_record(self, identifier, record):
+    def _use_record(self, identifier, record, store):
         self.records[identifier] = record
+        self.record_stores[identifier] = store
         self.states[identifier] = "current"
         for name, value in record["outputs"].items():
             if value.get("type") == "artifact":
-                value = {**value, "path": str(self.store.artifact_path(value))}
+                value = {**value, "path": str(store.artifact_path(value))}
             self.values[f"{identifier}.{name}"] = value
 
     def plan(self):
+        self.executed = []
         for identifier in self.project.order:
             try:
                 self._prepare(identifier)
@@ -152,7 +186,19 @@ class Engine:
     def build(self, trusted=False, force=False, progress=None):
         if not trusted:
             raise ClosureError("Execution requires explicit trusted=True or --trusted", "TRUST_REQUIRED")
-        with project_lock(self.project.root):
+        self.run_stores = dict(self.owner_stores)
+        with ExitStack() as locks:
+            self.owner_versions = {}
+            roots = {self.project.root, *(store.root.parent for store in self.run_stores.values())}
+            for root in sorted(roots):
+                try:
+                    locks.enter_context(project_lock(root))
+                except OSError as exc:
+                    if root == self.project.root or exc.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+                        raise
+                    for key, store in self.run_stores.items():
+                        if store.root.parent == root:
+                            self.run_stores[key] = self.store
             if Project(self.project.manifest_path, self.project.boundary).source_hash != self.project.source_hash:
                 raise ClosureError("Project source changed after this engine was prepared", "SOURCE_CONFLICT")
             if self.project.composition:
@@ -163,12 +209,19 @@ class Engine:
     def invocation_inputs(self):
         files = dict(self.project.document_hashes)
         sources = {}
+        _, limit_producers = self.project.limit_dependencies()
         for key in self.project.order:
             root = self.project.source_root(key)
             try:
                 sources[key] = source_snapshot(self.project, self.project.analyses[key], root)
             except ClosureError:
                 sources[key] = None  # The planner reports the specific missing input.
+            if key in limit_producers:
+                try:
+                    for path in limit_tools(self.project.analyses[key].run).values():
+                        files[path] = file_digest(path)
+                except ClosureError:
+                    pass  # Preparation reports the unavailable tool as missing evidence.
             files.update({root / path: value for path, value in (sources[key] or {}).items()})
             for path in self.project.analyses[key].run.tool_files:
                 target = (root / path).resolve()
@@ -191,6 +244,7 @@ class Engine:
         return sources, files
 
     def _build(self, force=False, progress=None):
+        self.executed = []
         def notify(event, **details):
             if progress:
                 progress({"event": event, "analysis": identifier, "index": index,
@@ -204,10 +258,16 @@ class Engine:
                 if self.states[identifier] == "current" and not force:
                     notify("cached")
                     continue
+                store = self.run_stores[identifier]
+                if store.root != self.owner_stores[identifier].root:
+                    store.invalidate(self.keys[identifier], fallback_for=self.owner_versions[identifier])
+                elif force:
+                    if self.record_stores.get(identifier) is self.store and store is not self.store:
+                        self.store.invalidate(self.keys[identifier])
+                    store.invalidate(self.keys[identifier])
                 if force:
                     # A failed forced rerun cannot leave an old passing record
                     # available to dependent analyses or requirement assessment.
-                    self.store.invalidate(self.keys[identifier])
                     self.records.pop(identifier, None)
                     for name in analysis.outputs:
                         self.values.pop(f"{identifier}.{name}", None)
@@ -221,10 +281,10 @@ class Engine:
                 except KeyError as exc:
                     raise ClosureError(f"Missing input artifact/value {exc}", "MISSING_INPUT") from exc
                 notify("running", reason="forced" if force else self.states[identifier])
-                record = self.store.execute(self.project, identifier, analysis, self.keys[identifier], self._slot(identifier),
+                record = store.execute(self.project, identifier, analysis, self.keys[identifier], self._slot(identifier),
                                             self.context, inputs, self.sources[identifier], self.environment,
-                                            {dep: self.records[dep]["record_hash"] for dep in sorted(self.project.dependencies[identifier])}, self.tools[identifier])
-                self._use_record(identifier, record)
+                                            {self.project.evidence_id(dep, identifier): self.records[dep]["record_hash"] for dep in sorted(self.project.dependencies[identifier])}, self.tools[identifier])
+                self._use_record(identifier, record, store)
                 self.executed.append(identifier)
                 notify("completed", seconds=time.monotonic() - started)
             except ClosureError as exc:
@@ -233,25 +293,41 @@ class Engine:
                 notify(self.states[identifier], error=exc.as_dict())
         report = self.report()
         if self.project.composition:
+            for key, version in self.owner_versions.items():
+                owner = self.owner_stores[key]
+                if self.run_stores[key].root != owner.root and owner.active_version(self.keys[key]) != version["run"]:
+                    raise ClosureError("Owner evidence changed during verification; retry", "SOURCE_CONFLICT", key)
             current = Project(self.project.manifest_path, self.project.boundary)
             if (current.source_hash != self.project.source_hash or self.invocation_inputs() != (self.pinned_sources, self.input_files)
                     or revision(self.project.workspace, self.input_files) != self.revision):
                 raise ClosureError("Inputs or revision changed during verification; retry", "SOURCE_CONFLICT")
             report["revision"] = self.revision
             report["comparison"] = compare_reports(previous_report(self.store, report), report)
+        for key, record in self.records.items():
+            source = self.record_stores[key]
+            if source.root != self.store.root:
+                self.store.retain_run(record, source)
         return self.store.save_report(report)
 
     def baseline(self, project=None):
         project = project or self.project
         path = within(project.root, project.manifest.baseline)
-        current = digest(project.obligation_contract())
+        contract = project.obligation_contract()
+        current = digest(contract)
         if not path.exists():
             return {"status": "missing", "current_hash": current, "message": "Initial obligations need a recorded baseline review."}
         approved = read_json(path)
         valid = approved.get("contract_hash") == current and bool(approved.get("reviewer")) and digest(approved.get("contract")) == current
+        message = "Obligations match the reviewed baseline."
+        if not valid:
+            message = "Acceptance definitions changed. A separate baseline review is required."
+            previous = approved.get("contract", {})
+            for field in ("limit_calculations", "limit_artifacts"):
+                if previous.get(field) != contract.get(field):
+                    message += " " + " ".join(contract_changes(previous.get(field), contract.get(field), field))
         return {"status": "current" if valid else "changed", "current_hash": current,
                 "approved_hash": approved.get("contract_hash"), "reviewer": approved.get("reviewer"),
-                "message": "Obligations match the reviewed baseline." if valid else "Requirements, scope, context set, or policy changed; separate review required."}
+                "message": message}
 
     def _reviews(self, project=None):
         project = project or self.project
@@ -283,20 +359,14 @@ class Engine:
                 "evidence_classes": sorted(classes),
                 "evidence_allowed": classes.issubset(policy.accepted_evidence)}
 
-    def assess(self, identifier, baseline, reviews):
+    def assess(self, identifier, baseline, reviews, linked_reviews=()):
         requirement = self.project.requirements[identifier]
         applicable = self.context["scenario"] in requirement.applies_to and self.context["configuration"] in requirement.configurations
         conditions = criteria(requirement.verify)
         sources = [binding.ref for c in conditions for binding in refs(c)]
         producers = sorted({self.project.producers[ref] for ref in sources if ref in self.project.producers})
         alternative = bool(conditions) and not isinstance(requirement.verify, Criterion) and requirement.verify.any_of is not None
-        policy = self.project.manifest.policy
-        if self.project.composition:
-            policies = self.project.composition.policies(identifier)
-            policy = self.project.unit_for(identifier).manifest.policy.model_copy(update={
-                "accepted_evidence": sorted(set.intersection(*(set(p.accepted_evidence) for p in policies))),
-                "require_review": any(p.require_review for p in policies),
-                "allow_waivers": all(p.allow_waivers for p in policies)})
+        policy = self.project.policy_for(identifier)
         branches = [self._criterion_support(c, i, policy) for i, c in enumerate(conditions)]
         # A declared alternative needs one current passing branch. Prefer evidence
         # allowed by policy; unused alternatives must not veto its closure.
@@ -313,17 +383,37 @@ class Engine:
             verdict = ("pass" if "pass" in outcomes else "unknown" if "unknown" in outcomes else "fail") if alternative else ("fail" if "fail" in outcomes else "unknown" if "unknown" in outcomes else "pass")
         comparisons = [{**b["comparison"], "branch": b["index"]} for b in branches if b["comparison"]]
         classes = {c for b in support for c in b["evidence_classes"]}
-        signature = digest({"requirement": requirement.model_dump(), "context": self.context, "policy": policy.model_dump(),
-                            "records": {p: self.records.get(p, {}).get("record_hash") for p in producers},
-                            "inputs": {r: self.parameters[r].model_dump() for r in sources if r in self.parameters}})
-        review = next((r for r in reversed(reviews) if r.get("requirement") == identifier and r.get("assessment_hash") == signature and r.get("context") == self.context), None)
+        support_identity = {"requirement": self.project.native_contracts.get(identifier, requirement.model_dump()),
+                            "context": self.context,
+                            "records": {self.project.evidence_id(p, identifier): self.records.get(p, {}).get("record_hash") for p in producers},
+                            "inputs": {self.project.evidence_id(r, identifier): self.parameters[r].model_dump() for r in sources if r in self.parameters}}
+        if alternative:
+            support_identity["selected_branches"] = selected
+
+        def review_signature(assessment_policy):
+            terms = assessment_policy.model_dump()
+            terms["accepted_evidence"] = sorted(terms["accepted_evidence"])
+            return digest({**support_identity, "policy": terms})
+
+        signature = review_signature(policy)
+        decisions = {}
+        candidates = [(self.project.manifest.project, signature, r) for r in reviews if r.get("requirement") == identifier]
+        candidates.extend((authority, review_signature(terms), r) for authority, terms, r in linked_reviews)
+        for authority, expected, entry in candidates:
+            if entry.get("context") == self.context and entry.get("assessment_hash") == expected:
+                if authority not in decisions or entry["at"] > decisions[authority]["at"]:
+                    decisions[authority] = entry
+        # One authority may revise its own review. Another authority cannot lift its rejection.
+        review = max(decisions.values(), key=lambda r: (r["decision"] == "rejected", r["at"]), default=None)
         acceptance = "accepted"
         if not classes.issubset(set(policy.accepted_evidence)):
             acceptance = "rejected"
         elif baseline["status"] != "current" or requirement.review_required or policy.require_review:
             acceptance = "review_required"
-        if review and acceptance != "rejected":
+        if review and acceptance != "rejected" and baseline["status"] == "current":
             acceptance = review.get("decision", "review_required")
+            if acceptance == "waived" and not policy.allow_waivers:
+                acceptance = "rejected"
         if not applicable:
             verdict, freshness, execution, acceptance = "unknown", "missing", "not_run", "review_required"
             if review and review.get("decision") == "not_applicable":
@@ -345,6 +435,7 @@ class Engine:
         reviews = self._reviews()
         composition = self.project.composition
         baselines = {self.project.manifest.project: baseline}
+        linked_reviews = {}
         if composition:
             for unit in composition.units.values():
                 supplies_claim = any(key.startswith(unit.name + "::") for key in self.project.scope)
@@ -354,9 +445,14 @@ class Engine:
                 baselines[unit.name] = self.baseline(local)
                 for review in self._reviews(local):
                     key = review.get("requirement", "")
-                    reviews.append({**review, "requirement": key if local.composition else unit.qualify(key)})
-        assessments = [self.assess(key, baselines.get(self.project.unit_for(key).name, baseline) if composition else baseline, reviews)
-                       for key in self.project.requirements]
+                    if key in local.requirements and (key in local.scope or local.source_root(key) == local.root):
+                        identifier = key if local.composition else unit.qualify(key)
+                        linked_reviews.setdefault(identifier, []).append(
+                            (unit.name, local.policy_for(key), {**review, "requirement": identifier}))
+        assessments = []
+        for key in self.project.requirements:
+            owner = self.project.unit_for(key).name if composition else self.project.manifest.project
+            assessments.append(self.assess(key, baselines.get(owner, baseline), reviews, linked_reviews.get(key, ())))
         scoped = [a for a in assessments if a["scoped"]]
         gate = bool(scoped) and bool(self.project.manifest.scenarios) and bool(self.project.manifest.configurations) and baseline["status"] == "current" and all(a["gate_allowed"] for a in scoped)
         analyses = [{"id": identifier, "state": self.states.get(identifier, "missing"), "execution_key": self.keys.get(identifier),
@@ -407,7 +503,7 @@ def approve_baseline(project, reviewer, reason):
         raise ClosureError("Baseline review requires reviewer and rationale", "REVIEW_INVALID")
     if not project.scope or not project.manifest.scenarios or not project.manifest.configurations:
         raise ClosureError("Cannot approve an empty closure scope", "EMPTY_SCOPE")
-    contract = project.obligation_contract()
+    contract = project.obligation_contract(approving=True)
     record = {"schema": "closure-baseline/0.1", "contract": contract, "contract_hash": digest(contract), "reviewer": reviewer, "reason": reason, "at": utcnow()}
     atomic_json(within(project.root, project.manifest.baseline), record)
     return record
@@ -422,7 +518,7 @@ def record_review(engine, identifier, decision, reviewer, reason):
         raise ClosureError("Unknown requirement", "UNKNOWN_REF")
     if decision == "accepted" and (assessment["verdict"] != "pass" or assessment["freshness"] != "current"):
         raise ClosureError("Acceptance requires current passing evidence", "REVIEW_INVALID")
-    if decision == "accepted" and assessment["acceptance"] == "rejected":
+    if decision == "accepted" and not set(assessment["evidence_classes"]).issubset(engine.project.policy_for(identifier).accepted_evidence):
         raise ClosureError("A review cannot override the policy's accepted evidence classes", "REVIEW_INVALID")
     if decision == "not_applicable" and assessment["applicability"] != "not_applicable":
         raise ClosureError("Applicable requirement cannot be reviewed as not applicable", "REVIEW_INVALID")

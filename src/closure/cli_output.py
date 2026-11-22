@@ -53,6 +53,10 @@ def tree(value, indent=0):
 def assessment_lines(item):
     suffix = " (outside selected scope)" if item.get("scoped") is False else ""
     lines = [f"{item['status']:12} {item['id']}{suffix}", f"  {item['text']}"]
+    if review := item.get("review"):
+        lines.append(f"  Review recorded by {review['reviewer']} on {review['at']} ({review['decision']}). {review['reason']}")
+    if item.get("acceptance") == "rejected" and any(not b["evidence_allowed"] for b in item.get("branches", [])):
+        lines.append("  Evidence outside the acceptance policy: " + ", ".join(item["evidence_classes"]))
     operators = {"gte": ">=", "lte": "<=", "gt": ">", "lt": "<", "eq": "=", "ne": "!="}
     alternative = item.get("verification_mode") == "any_of"
     if alternative:

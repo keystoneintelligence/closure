@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .composition import Composition, manifest_path, workspace_root
+from .evidence import limit_tools, source_snapshot
 import graphlib
 import re
 from pathlib import Path
@@ -43,6 +44,7 @@ class Project:
         self.modules = {}
         self.parameters = {}
         self.analyses = {}
+        self.native_contracts = {}
         self.requirements = {}
         self.ports = {}
         self.producers = {}
@@ -51,7 +53,7 @@ class Project:
         self.manifest = self._load(self.manifest_path, Manifest)
         self.composition = (Composition(self, self.manifest, self.workspace)
                             if isinstance(self.manifest, CompositionManifest) else None)
-        entries = self.composition.module_entries() if self.composition else self._local_modules()
+        entries = self.composition.module_entries(self) if self.composition else self._local_modules()
         for module_path, module in entries:
             if module.module in self.modules:
                 raise ClosureError(f"Duplicate module {module.module}", "DUPLICATE_ID", str(module_path))
@@ -139,6 +141,21 @@ class Project:
     def source_root(self, identifier):
         unit = self.unit_for(identifier)
         return unit.path.parent if unit else self.root
+
+    def evidence_id(self, identifier, owner=None):
+        unit = self.unit_for(owner or identifier)
+        if unit and not isinstance(unit.manifest, CompositionManifest):
+            return identifier.split("::", 1)[1]
+        return identifier
+
+    def policy_for(self, identifier):
+        if not self.composition:
+            return self.manifest.policy
+        policies = self.composition.policies(identifier)
+        return self.unit_for(identifier).manifest.policy.model_copy(update={
+            "accepted_evidence": sorted(set.intersection(*(set(p.accepted_evidence) for p in policies))),
+            "require_review": any(p.require_review for p in policies),
+            "allow_waivers": all(p.allow_waivers for p in policies)})
 
     @staticmethod
     def _identifier(value):
@@ -255,12 +272,53 @@ class Project:
             values[identifier] = replacement
         return values
 
-    def obligation_contract(self):
-        protected = self.protected_parameters()
+    def obligation_contract(self, *, approving=False):
+        protected, producers = self.limit_dependencies()
+        definitions = {}
+        for key in sorted(producers):
+            analysis = self.analyses[key]
+            root = self.source_root(key)
+            tools = {}
+            try:
+                files = source_snapshot(self, analysis, root)
+                for name, executable in limit_tools(analysis.run).items():
+                    tools[name] = file_digest(executable)
+            except ClosureError as exc:
+                if approving:
+                    raise
+                files = {"unavailable": str(exc)}
+            for name in analysis.run.tool_files:
+                path = (root / name).resolve()
+                if approving and not path.is_file():
+                    raise ClosureError(f"Missing limit calculation dependency {name}", "MISSING_SOURCE", str(path))
+                files[name] = file_digest(path) if path.is_file() else None
+            definitions[key] = {"analysis": analysis.model_dump(), "files": files}
+            if tools:
+                definitions[key]["executables"] = tools
+        additions = {"limit_calculations": definitions} if definitions else {}
+        # An artifact's path is part of its declaration. Its bytes can change in place.
+        assets = {}
+        for key in sorted(protected):
+            if self.parameters[key].type != "artifact":
+                continue
+            unit = self.unit_for(key)
+            manifest = unit.manifest if unit else self.manifest
+            local = key.split("::", 1)[-1]
+            paths = {self.parameters[key].path}
+            for context in (*manifest.configurations.values(), *manifest.scenarios.values()):
+                if local in context.overrides:
+                    paths.add(context.overrides[local].path)
+            for name in sorted(paths - {None}):
+                path = within(self.source_root(key), name)
+                if approving and not path.is_file():
+                    raise ClosureError(f"Missing limit input {key}: {name}", "MISSING_INPUT", str(path))
+                assets.setdefault(key, {})[name] = file_digest(path) if path.is_file() else None
+        if assets:
+            additions["limit_artifacts"] = assets
         if self.composition:
             included = set(self.scope)
             units = self.composition.describe()
-            return {"scope": self.scope, "projects": units,
+            return {**additions, "scope": self.scope, "projects": units,
                     "requirements": {k: self.requirements[k].model_dump() for k in sorted(included)},
                     "limit_inputs": {k: self.parameters[k].model_dump() for k in sorted(protected)},
                     "contexts": {u.name: {group: {name: {k: v.model_dump() for k, v in context.overrides.items()
@@ -268,7 +326,7 @@ class Project:
                                                    for name, context in getattr(u.manifest, group).items()}
                                           for group in ("scenarios", "configurations")}
                                  for u in self.composition.units.values()}}
-        return {"requirements": {k: v.model_dump() for k, v in self.requirements.items()}, "scope": self.scope,
+        return {**additions, "requirements": {k: v.model_dump() for k, v in self.requirements.items()}, "scope": self.scope,
                 "scenarios": sorted(self.manifest.scenarios), "configurations": sorted(self.manifest.configurations),
                 "policy": self.manifest.policy.model_dump(),
                 "limit_inputs": {k: self.parameters[k].model_dump() for k in sorted(protected)},
@@ -277,9 +335,13 @@ class Project:
                                             for group, contexts in [("scenarios", self.manifest.scenarios), ("configurations", self.manifest.configurations)]}}
 
     def protected_parameters(self):
-        pending = [condition.limit.ref for requirement in self.requirements.values()
+        return self.limit_dependencies(scoped=False)[0]
+
+    def limit_dependencies(self, *, scoped=True):
+        requirements = (self.requirements[k] for k in self.scope) if scoped and self.composition else self.requirements.values()
+        pending = [condition.limit.ref for requirement in requirements
                    for condition in criteria(requirement.verify) if isinstance(condition.limit, Binding)]
-        visited, protected = set(), set()
+        visited, protected, producers = set(), set(), set()
         while pending:
             identifier = pending.pop()
             if identifier in visited:
@@ -288,9 +350,12 @@ class Project:
             if identifier in self.parameters:
                 protected.add(identifier)
             elif identifier in self.producers:
-                analysis = self.analyses[self.producers[identifier]]
+                key = self.producers[identifier]
+                producers.add(key)
+                analysis = self.analyses[key]
                 pending.extend(binding.ref for binding in analysis.inputs.values())
-        return protected
+                pending.extend(binding.ref for condition in analysis.valid_when for binding in refs(condition))
+        return protected, producers
 
     def check(self):
         diagnostics = []

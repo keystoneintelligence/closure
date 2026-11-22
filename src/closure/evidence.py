@@ -88,19 +88,24 @@ def resolve_executable(argv):
     return [os.path.abspath(executable), *argv[1:]]
 
 
+def declared_executables(run):
+    executables = {}
+    for alias, command in run.tools.items():
+        if not alias.replace("_", "").isalnum():
+            raise ClosureError(f"Invalid tool alias: {alias}", "TOOL_INVALID")
+        requested = os.environ.get("CLOSURE_TOOL_" + alias.upper(), command)
+        executables[alias] = Path(resolve_executable([requested])[0])
+    return executables
+
+
 def tool_identity(run, root):
     """Fingerprint declared external tools without launching version probes.
 
     CLOSURE_TOOL_<NAME> provides a machine-local executable override, so authored
     contracts can keep portable tool names. The resolved path and bytes form the key.
     """
-    executables = {}
-    for alias, command in run.tools.items():
-        if not alias.replace("_", "").isalnum():
-            raise ClosureError(f"Invalid tool alias: {alias}", "TOOL_INVALID")
-        requested = os.environ.get("CLOSURE_TOOL_" + alias.upper(), command)
-        executable = resolve_executable([requested])[0]
-        executables[alias] = {"path": executable, "sha256": file_digest(executable)}
+    executables = {alias: {"path": str(path), "sha256": file_digest(path)}
+                   for alias, path in declared_executables(run).items()}
     dependencies = {}
     for declared in run.tool_files:
         path = (root / declared).resolve()
@@ -110,6 +115,14 @@ def tool_identity(run, root):
     return {"executables": executables, "files": dependencies}
 
 
+def limit_tools(run):
+    """Resolve tools explicitly selected to implement a criterion, without running them."""
+    declared = declared_executables(run)
+    if run.argv[0] not in ("python", "python3", "{python}"):
+        declared["runner " + run.argv[0]] = Path(resolve_executable(run.argv)[0])
+    return declared
+
+
 class EvidenceStore:
     def __init__(self, root: Path):
         self.root = root / ".closure"
@@ -117,6 +130,10 @@ class EvidenceStore:
     def index(self):
         path = self.root / "index.json"
         return read_json(path) if path.exists() else {"keys": {}, "history": {}}
+
+    def active_version(self, key):
+        index = self.index()
+        return index["keys"].get(key) or index.get("withdrawals", {}).get(key)
 
     def artifact_path(self, value):
         checksum = value.get("sha256", "")
@@ -183,6 +200,21 @@ class EvidenceStore:
     def load_run(self, identifier, artifacts=True):
         return self._verify_record(self._read_history("runs", identifier), artifacts)
 
+    def retain_run(self, record, source):
+        """Archive an owner's exact record in the selected project for offline history."""
+        values = list(record["outputs"].values())
+        if record.get("inputs_archived"):
+            values.extend(record["inputs"].values())
+        for value in values:
+            if value.get("type") == "artifact":
+                self.archive_artifact(source.artifact_path(value), value["sha256"])
+        path = self.root / "runs" / f"{record['id']}.json"
+        if path.exists():
+            if self.load_run(record["id"], artifacts=False) != record:
+                raise ClosureError("Archived run identity collision", "RECORD_COLLISION")
+        else:
+            atomic_json(path, record)
+
     def save_report(self, report):
         report = json.loads(canonical({**report, "report_hash": digest(report)}))
         validate_report(report)
@@ -239,12 +271,16 @@ class EvidenceStore:
             return "missing", None
         return ("stale" if index["history"].get(slot) else "missing"), None
 
-    def invalidate(self, key):
+    def invalidate(self, key, *, fallback_for=None):
         """Withdraw reusable support before a forced attempt; retain history."""
         index = self.index()
-        if key in index["keys"]:
-            del index["keys"][key]
-            atomic_json(self.root / "index.json", index)
+        index["keys"][key] = None
+        index.setdefault("withdrawals", {})[key] = uuid.uuid4().hex
+        if fallback_for is not None:
+            index.setdefault("local_fallbacks", {})[key] = fallback_for
+        else:
+            index.get("local_fallbacks", {}).pop(key, None)
+        atomic_json(self.root / "index.json", index)
 
     def publish(self, record, slot):
         record = json.loads(canonical({**record, "record_hash": digest(record)}))
@@ -255,6 +291,7 @@ class EvidenceStore:
         atomic_json(path, record)
         index = self.index()
         index["keys"][record["execution_key"]] = record["id"]
+        index.get("withdrawals", {}).pop(record["execution_key"], None)
         index["history"].setdefault(slot, []).append(record["id"])
         atomic_json(self.root / "index.json", index)
         return record
@@ -354,7 +391,7 @@ class EvidenceStore:
             for value in run_inputs.values():
                 if value.get("type") == "artifact":
                     self.archive_artifact(value["path"], value["sha256"])
-            record = {"id": invocation, "protocol": "closure-evidence/0.1", "analysis": identifier, "execution_key": key,
+            record = {"id": invocation, "protocol": "closure-evidence/0.1", "analysis": project.evidence_id(identifier), "execution_key": key,
                       "started_at": started, "finished_at": utcnow(), "context": context, "inputs": inputs, "outputs": outputs,
                       "inputs_archived": True,
                       "sources": source_files, "environment": environment, "command": command, "upstream": upstream,
