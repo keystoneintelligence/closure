@@ -42,6 +42,7 @@ class Viewer:
         if not self.project.is_relative_to(self.workspace):
             raise ClosureError("Viewer project must be inside its workspace", "PATH_ESCAPE")
         self.trusted = trusted
+        self.linked_artifacts = {}
         self.token = secrets.token_urlsafe(32)
 
     def projects(self):
@@ -67,6 +68,10 @@ class Viewer:
 
     def snapshot(self, scenario=None, configuration=None, report_id=None):
         report = EvidenceStore(self.project).load_report(report_id) if report_id else self.engine(scenario, configuration).plan()
+        if not report_id:
+            for value in report["values"].values():
+                if value.get("type") == "artifact":
+                    self.linked_artifacts[value["sha256"]] = Path(value["path"])
         return {**report["model"], "path":str(self.project.relative_to(self.workspace)), "report":report,
                 "mode":"historical" if report_id else "current", "token":self.token,"trusted":self.trusted,"projects":self.projects()}
 
@@ -149,6 +154,10 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                     path=app.project/".closure/artifacts"/sha
                     if path.is_file():
                         path=EvidenceStore(app.project).artifact_path({"sha256":sha})
+                    elif sha in app.linked_artifacts:
+                        path = app.linked_artifacts[sha]
+                        if file_digest(path) != sha:
+                            raise ClosureError("Linked artifact bytes changed", "ARTIFACT_CORRUPT")
                     else:
                         selected = Project(app.manifest_path, app.workspace)
                         for key, datum in selected.parameters.items():
@@ -201,6 +210,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                     selected=Project(path, app.workspace)
                     app.project=selected.root
                     app.manifest_path=selected.manifest_path
+                    app.linked_artifacts.clear()
                     return self.respond(app.snapshot())
                 if body.get("project")!=str(app.project.relative_to(app.workspace)):
                     return self.respond({"error":"Selected project changed; reload before writing"},409)

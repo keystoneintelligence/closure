@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 from .io import ClosureError, within
-from .models import Manifest, Module
+from .models import CompositionManifest, Manifest, Module
 
 
 def manifest_path(path):
@@ -128,11 +128,15 @@ class Composition:
                 unit.children[alias] = child.name
                 self.select(project, child, [*ancestors, unit.name])
 
-    def module_entries(self):
+    def module_entries(self, project):
         from .project import criteria, refs
         for unit in self.units.values():
             for path, module in unit.modules:
                 module.module = unit.qualify(module.module)
+                if not isinstance(unit.manifest, CompositionManifest):
+                    for contracts in (module.analyses, module.requirements):
+                        for name, contract in contracts.items():
+                            project.native_contracts[f"{module.module}.{name}"] = contract.model_dump()
                 for analysis in module.analyses.values():
                     bindings = list(analysis.inputs.values())
                     bindings.extend(b for condition in analysis.valid_when for b in refs(condition))

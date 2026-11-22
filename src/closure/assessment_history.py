@@ -53,6 +53,23 @@ def contract_changes(before, after, path=""):
     """Render changed acceptance definitions, preserving field and project names."""
     if before == after:
         return []
+    if path == "limit_calculations" and (before is None or after is None):
+        change = "added" if before is None else "removed"
+        return [f"Limit calculation {key} {change}." for key in sorted(before or after or {})]
+    if path.startswith(("limit_calculations.", "limit_artifacts.")):
+        if before is None or after is None:
+            return [f"Limit definition {path.split('.', 1)[1]} {'added' if before is None else 'removed'}."]
+        if isinstance(before, str) and ".files." in path:
+            calculation, name = path.removeprefix("limit_calculations.").split(".files.", 1)
+            return [f"Limit calculation {calculation}: file {name} changed."]
+        if isinstance(before, str) and ".executables." in path:
+            calculation, name = path.removeprefix("limit_calculations.").split(".executables.", 1)
+            return [f"Limit calculation {calculation}: executable {name} changed."]
+        if isinstance(before, str) and path.startswith("limit_artifacts."):
+            return [f"Limit input file {path.removeprefix('limit_artifacts.')} changed."]
+        if ".analysis.settings." in path:
+            calculation, setting = path.removeprefix("limit_calculations.").split(".analysis.settings.", 1)
+            return [f"Limit calculation {calculation}: {setting} changed from {before} to {after}."]
     if isinstance(before, dict) and isinstance(after, dict):
         return [line for key in sorted(before.keys() | after.keys())
                 for line in contract_changes(before.get(key), after.get(key), f"{path}.{key}" if path else key)]

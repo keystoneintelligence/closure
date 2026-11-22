@@ -82,6 +82,13 @@ test('composed power history and project navigation', async ({page, serviceURL},
   }
   const first = await verify();
   expect(first.gate).toBe(true);
+  expect(first.executed).not.toContain('electronics::load.scale');
+  const structure = page.locator('.composition').filter({has: page.getByRole('heading', {name: 'Project structure'})});
+  await structure.locator('summary').filter({hasText:/electronics/i}).click();
+  await structure.locator('[data-explain="electronics::load.local_budget"]').click();
+  await expect(page.getByRole('dialog')).toContainText('Electronics reviewer');
+  await expect(page.getByRole('dialog')).toContainText('Checked the component allocation.');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', {name:'Return to current project'}).click();
   await page.getByRole('button', {name:'Variables',exact:true}).click();
   await page.locator('[data-variable="system::budget.maximum"]').click();

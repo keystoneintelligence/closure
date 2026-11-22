@@ -53,6 +53,7 @@ def export_report(engine, destination, report_id=None):
             record = analysis.get("record")
             if not record:
                 continue
+            record_store = store if report_id else engine.record_stores[analysis["id"]]
             entries = [(name, value, "output") for name, value in record["outputs"].items()]
             if record.get("inputs_archived"):
                 entries.extend((name, value, "input") for name, value in record["inputs"].items())
@@ -62,7 +63,7 @@ def export_report(engine, destination, report_id=None):
                 relative = Path("artifacts") / (value["sha256"][:16] + "-" + Path(value["name"]).name)
                 target = stage / relative
                 target.parent.mkdir(exist_ok=True)
-                shutil.copyfile(store.artifact_path(value), target)
+                shutil.copyfile(record_store.artifact_path(value), target)
                 if file_digest(target) != value["sha256"]:
                     raise ClosureError("Artifact changed during report export", "ARTIFACT_CONFLICT")
                 identifier = f"{analysis['id']}.{name}" if role == "output" else f"{analysis['id']}.inputs.{name}"
@@ -76,7 +77,10 @@ def export_report(engine, destination, report_id=None):
         for requirement in report["requirements"]:
             comparisons = "<br>".join(esc(f"{c.get('actual')} {c.get('unit') or ''} {c.get('op', '')} {c.get('limit')} | margin {c.get('margin')}")
                                         for c in requirement["comparisons"])
-            rows.append(f"<tr><td>{esc(requirement['status'])}</td><td><code>{esc(requirement['id'])}</code><br>{esc(requirement['text'])}</td>"
+            review = requirement.get("review")
+            attribution = (f"<br>Review recorded by {esc(review['reviewer'])} on {esc(review['at'])} "
+                           f"({esc(review['decision'])}). {esc(review['reason'])}" if review else "")
+            rows.append(f"<tr><td>{esc(requirement['status'])}</td><td><code>{esc(requirement['id'])}</code><br>{esc(requirement['text'])}{attribution}</td>"
                         f"<td>{comparisons or 'No current comparison'}</td><td>{'Included' if requirement['scoped'] else 'Excluded'}</td></tr>")
         links = "".join(f'<li><a href="{quote(a["file"])}">{esc(a["id"])}</a><br><small>{esc(a["sha256"])}</small></li>' for a in artifacts)
         assumptions = "".join(f"<li>{esc(a['id'])}: {esc(a['rationale'])}</li>" for a in report.get("assumptions", []))

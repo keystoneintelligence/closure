@@ -36,7 +36,8 @@ def test_shared_execution_and_local_acceptance(assembly):
     assert any("maximum" in line for line in changed["baseline_changes"])
     assert changed["requirements"][0]["comparisons"][0]["margin"] == -4
     independent = Engine(assembly / "electronics").verify(trusted=True)
-    assert independent["gate"] and len(independent["executed"]) == 2
+    assert independent["gate"] and independent["executed"] == []
+    assert {a["id"] for a in independent["analyses"]} == {"electronics::load.scale", "reference::profile.evaluate"}
     assert "cooling" not in independent["projects"]
 
 
