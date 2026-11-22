@@ -130,6 +130,7 @@ def make_parser():
             command.add_argument("--output", required=True, help="New destination folder for the portable report")
             command.add_argument("--report", help="Export a saved snapshot by ID instead of the current project")
         if name == "history":
+            command.add_argument("--compare", metavar="EARLIER_REPORT", help="Compare --report with a saved assessment in the same context")
             selection = command.add_mutually_exclusive_group()
             selection.add_argument("--report", help="Inspect a saved verification report by ID")
             selection.add_argument("--run", help="Inspect an immutable analysis run by ID")

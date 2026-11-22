@@ -91,7 +91,7 @@ def main():
     checked=json.loads(result.stdout)
     if args.isolated:
         command=interpreter.parent/('closure.exe' if sys.platform=='win32' else 'closure')
-        assert subprocess.check_output([str(command),'--version'],text=True).strip()=='closure 0.1.0a1'
+        assert subprocess.check_output([str(command),'--version'],text=True).strip()=='closure 0.2.0a1'
         state=json.loads(subprocess.check_output([str(command),'check','-p',str(scratch/'project'),'--json'],text=True))
         assert state['valid']
         checked['checks'].append('installed console entrypoint')

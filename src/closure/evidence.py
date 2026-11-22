@@ -16,7 +16,7 @@ from pathlib import Path
 from .io import ClosureError, atomic_json, canonical, digest, file_digest, read_json, within
 from .units import validate_value
 from .processes import managed_process
-from .protocol import EvidenceRecord, Report, RunnerRequest, RunnerResponse
+from .protocol import validate_report, EvidenceRecord, RunnerRequest, RunnerResponse
 
 
 def utcnow():
@@ -31,17 +31,18 @@ def environment_identity():
             "packages": sorted((d.metadata.get("Name", ""), d.version) for d in importlib.metadata.distributions())}
 
 
-def source_snapshot(project, analysis):
+def source_snapshot(project, analysis, root=None):
+    root = project.root if root is None else root
     found = set()
     for pattern in analysis.run.sources + ([analysis.run.environment_lock] if analysis.run.environment_lock else []):
-        target = within(project.root, pattern)
-        matches = [target] if target.exists() else sorted(project.root.glob(pattern))
+        target = within(root, pattern)
+        matches = [target] if target.exists() else sorted(root.glob(pattern))
         if not matches:
             raise ClosureError(f"Source not found: {pattern}", "MISSING_SOURCE")
         for match in matches:
             for path in match.rglob("*") if match.is_dir() else [match]:
-                if path.is_file() and not any(p in ("__pycache__", ".closure", ".venv", ".git") for p in path.relative_to(project.root).parts):
-                    if path.is_symlink() or not path.resolve().is_relative_to(project.root):
+                if path.is_file() and not any(p in ("__pycache__", ".closure", ".venv", ".git") for p in path.relative_to(root).parts):
+                    if path.is_symlink() or not path.resolve().is_relative_to(root):
                         raise ClosureError("Source symlinks must resolve inside the project", "PATH_ESCAPE")
                     found.add(path)
     # Capture statically resolvable transitive local Python imports without importing them.
@@ -58,7 +59,7 @@ def source_snapshot(project, analysis):
         for node in ast.walk(tree):
             names = [n.name for n in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
             for name in names:
-                bases = [path.parent, project.root]
+                bases = [path.parent, root]
                 if isinstance(node, ast.ImportFrom) and node.level:
                     base = path.parent
                     for _ in range(node.level - 1):
@@ -70,10 +71,10 @@ def source_snapshot(project, analysis):
                     if isinstance(node, ast.ImportFrom):
                         candidates.extend(module_path / (alias.name + ".py") for alias in node.names)
                     for candidate in candidates:
-                        if candidate.is_file() and candidate.resolve().is_relative_to(project.root) and candidate not in found:
+                        if candidate.is_file() and candidate.resolve().is_relative_to(root) and candidate not in found:
                             found.add(candidate)
                             pending.append(candidate)
-    return {str(p.relative_to(project.root)).replace("\\", "/"): file_digest(p) for p in sorted(found)}
+    return {str(p.relative_to(root)).replace("\\", "/"): file_digest(p) for p in sorted(found)}
 
 
 def resolve_executable(argv):
@@ -184,7 +185,7 @@ class EvidenceStore:
 
     def save_report(self, report):
         report = json.loads(canonical({**report, "report_hash": digest(report)}))
-        Report.model_validate(report)
+        validate_report(report)
         path = self.root / "reports" / f"{report['id']}.json"
         if path.exists():
             raise ClosureError("Report identity collision", "RECORD_COLLISION")
@@ -197,9 +198,9 @@ class EvidenceStore:
         if "report_hash" not in report or "model" not in report:
             raise ClosureError("This legacy report has no sealed model snapshot. Its individual run records remain inspectable; build again to create a full snapshot.", "REPORT_UNSEALED")
         try:
-            Report.model_validate(report)
+            validate_report(report)
             body = {k: v for k, v in report.items() if k != "report_hash"}
-            if report.get("schema") != "closure-report/0.1" or digest(body) != report["report_hash"]:
+            if digest(body) != report["report_hash"]:
                 raise ValueError("report digest mismatch")
             for analysis in report["analyses"]:
                 if analysis.get("record"):
@@ -265,7 +266,7 @@ class EvidenceStore:
             snapshot = Path(temporary) / "source"
             snapshot.mkdir()
             for relative, expected in source_files.items():
-                source = within(project.root, relative)
+                source = within(project.source_root(identifier), relative)
                 target = within(snapshot, relative)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
@@ -309,7 +310,7 @@ class EvidenceStore:
             logs = stderr_path.read_text(encoding="utf-8", errors="replace")
             if process.returncode != 0:
                 raise ClosureError(f"Analysis exited {process.returncode}: {logs[-4000:]}", "RUN_ERROR")
-            if tools is not None and tool_identity(analysis.run, project.root) != tools:
+            if tools is not None and tool_identity(analysis.run, project.source_root(identifier)) != tools:
                 raise ClosureError("External tool changed during execution", "TOOL_MUTATION")
             for relative, expected in source_files.items():
                 path = within(snapshot, relative)

@@ -11,6 +11,8 @@ spec.loader.exec_module(release_check)
 
 def candidate():
     metadata = json.loads((ROOT/'release/preview.json').read_text())
+    # Exercise the publication checker with an explicitly approved test candidate.
+    metadata['approvals'] = dict.fromkeys(metadata['approvals'], True)
     record = {'implementation_version': metadata['implementation_version'], 'source_commit': 'a'*40,
               'ci': {'conclusion': 'success', 'source_commit': 'a'*40,
                      'run_url': metadata['repository_url']+'/actions/runs/123'}}

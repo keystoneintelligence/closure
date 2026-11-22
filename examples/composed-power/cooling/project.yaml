@@ -1,0 +1,5 @@
+schema: closure/0.2
+project: cooling
+imports:
+  reference: {path: ../reference, export: load}
+exports: {demand: load.scale.demand}

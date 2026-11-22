@@ -33,7 +33,8 @@ def compare_git(project: Project, ref: str):
     """
     root = Path(_git(project.root, "rev-parse", "--show-toplevel")).resolve()
     commit = _git(root, "rev-parse", "--verify", "--end-of-options", ref + "^{commit}")
-    prefix = project.root.relative_to(root).as_posix()
+    boundary = project.workspace if project.composition else project.root
+    prefix = boundary.relative_to(root).as_posix()
     tree = commit if prefix == "." else f"{commit}:{prefix}"
     changed = _git(root, "diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", commit, "--", prefix).split("\0")
     changed += _git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", prefix).split("\0")
@@ -60,7 +61,7 @@ def compare_git(project: Project, ref: str):
                 with contents.extractfile(member) as source, target.open("wb") as output:
                     shutil.copyfileobj(source, output)
         try:
-            base = Project(snapshot / project.manifest_path.name)
+            base = Project(snapshot / project.manifest_path.relative_to(boundary), workspace=snapshot)
         except ClosureError as exc:
             raise ClosureError(f"Cannot compile Git baseline: {exc}", "BASE_INVALID") from exc
         before = {section: {k: v.model_dump() for k, v in getattr(base, section).items()}
@@ -76,14 +77,14 @@ def compare_git(project: Project, ref: str):
                     snapshots.append({})
                 else:
                     try:
-                        snapshots.append(source_snapshot(version, version.analyses[identifier]))
+                        snapshots.append(source_snapshot(version, version.analyses[identifier], version.source_root(identifier)))
                     except ClosureError as exc:
                         raise ClosureError(f"Cannot compare {identifier}: {exc}", "BASE_SOURCE") from exc
             # Git normalizes tracked text (e.g. Windows autocrlf). Its change set
             # decides whether an existing path changed; raw hashes still identify
             # the two versions of changed dependencies and all added/removed paths.
             files = [change for change in _changes(*snapshots)
-                     if change["change"] != "modified" or change["id"] in relative_changes]
+                     if change["change"] != "modified" or (project.source_root(identifier).relative_to(boundary) / change["id"]).as_posix() in relative_changes]
             if files:
                 sources.append({"analysis": identifier, "files": files})
         artifact_changes = []
@@ -91,7 +92,7 @@ def compare_git(project: Project, ref: str):
             hashes = []
             for version in (base, project):
                 datum = version.parameters.get(identifier)
-                path = within(version.root, datum.path) if datum and datum.type == "artifact" else None
+                path = within(version.source_root(identifier), datum.path) if datum and datum.type == "artifact" else None
                 hashes.append(file_digest(path) if path and path.is_file() else None)
             if hashes[0] != hashes[1]:
                 artifact_changes.append({"id": identifier, "before": hashes[0], "after": hashes[1]})
@@ -109,13 +110,14 @@ def compare_git(project: Project, ref: str):
             for identifier in list(affected):
                 if identifier in version.locations or identifier in version.ports:
                     affected.update(version.impact(identifier)["affected"])
-        moved = [{"module": identifier, "before": str(Path(base.locations[identifier]).relative_to(base.root)).replace("\\", "/"),
-                  "after": str(Path(project.locations[identifier]).relative_to(project.root)).replace("\\", "/")}
+        moved = [{"module": identifier, "before": str(Path(base.locations[identifier]).relative_to(base.workspace if base.composition else base.root)).replace("\\", "/"),
+                  "after": str(Path(project.locations[identifier]).relative_to(boundary)).replace("\\", "/")}
                  for identifier in sorted(base.modules.keys() & project.modules.keys())
-                 if Path(base.locations[identifier]).relative_to(base.root) != Path(project.locations[identifier]).relative_to(project.root)]
+                 if Path(base.locations[identifier]).relative_to(base.workspace if base.composition else base.root) != Path(project.locations[identifier]).relative_to(boundary)]
         return {"ref": ref, "commit": commit, "changed_files": sorted(set(changed)),
                 "changes": changes, "source_changes": sources, "artifact_changes": artifact_changes, "moved_modules": moved,
                 "context_changed": bool(context_changes),
+                "project_changes": _changes(base.composition.describe() if base.composition else {}, project.composition.describe() if project.composition else {}),
                 "obligations_changed": digest(base.obligation_contract()) != digest(project.obligation_contract()),
                 "affected_analyses": sorted(affected & (base.analyses.keys() | project.analyses.keys())),
                 "affected_requirements": sorted(affected & (base.requirements.keys() | project.requirements.keys())),

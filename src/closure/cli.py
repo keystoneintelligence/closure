@@ -130,6 +130,11 @@ def main(argv=None):
                 store = EvidenceStore(root)
                 result = {"mode": "historical", "report": store.load_report(args.report)} if args.report else (
                     {"mode": "historical", "run": store.load_run(args.run)} if args.run else store.history())
+                if args.compare:
+                    if not args.report:
+                        raise UsageError("--compare requires --report")
+                    from .assessment_history import compare_reports
+                    result["comparison"] = compare_reports(store.load_report(args.compare), result["report"])
             elif args.command == "export" and args.report:
                 from .reporting import export_report
                 result = export_report(path, args.output, args.report)

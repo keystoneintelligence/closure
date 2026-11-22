@@ -1,6 +1,6 @@
 # Coordinated preview release
 
-The review unit is specification revision `preview.1`, source/runner 0.1, Python `0.1.0a1`, and viewer `0.1.0-alpha.1`. Licensing is Apache-2.0, copyright Keystone Intelligence LLC. The website is [Keystone Intelligence](https://www.keystoneintelligence.ai/); source is [keystoneintelligence/closure](https://github.com/keystoneintelligence/closure).
+The review unit is source 0.1 and 0.2 composition, runner 0.1, Python `0.2.0a1`, and viewer `0.2.0-alpha.1`. Licensing is Apache-2.0, copyright Keystone Intelligence LLC. The website is [Keystone Intelligence](https://www.keystoneintelligence.ai/); source is [keystoneintelligence/closure](https://github.com/keystoneintelligence/closure).
 
 ## Prepare and review
 

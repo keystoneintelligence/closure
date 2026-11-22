@@ -11,7 +11,7 @@ def audit(folder):
     manifest=json.loads((folder/'manifest.json').read_text())
     source=folder/'source'
     errors=[]
-    expected={'closure-0.1.0a1/'+e['path']:e for e in manifest['files']}
+    expected={'closure-0.2.0a1/'+e['path']:e for e in manifest['files']}
     archive=folder/manifest['archive']
     if hashlib.sha256(archive.read_bytes()).hexdigest()!=manifest['sha256']: errors.append('Archive digest differs')
     with zipfile.ZipFile(archive) as bundle:
