@@ -312,8 +312,30 @@ class ProjectGate(RuntimeContract):
     reasons: list[str]
 
 
+class Revision(RuntimeContract):
+    state: Literal["committed inputs", "local changes", "local snapshot"]
+    commit: str | None
+    files: list[str]
+
+
+class WorkDecision(RuntimeContract):
+    analysis: str
+    reason: str
+    run: Identity | None
+
+
+class AssessmentComparison(RuntimeContract):
+    previous: Identity | None
+    previous_date: str | None
+    changes: list[str]
+    decisions: list[WorkDecision]
+
+
 class ComposedReport(Report):
     schema_version: Literal["closure-report/0.2"] = Field(alias="schema")
+    baseline_changes: list[str] = Field(default_factory=list)
+    revision: Revision | None = None
+    comparison: AssessmentComparison | None = None
     model: ComposedModel
     projects: dict[str, ProjectDescription]
     gates: dict[str, ProjectGate]

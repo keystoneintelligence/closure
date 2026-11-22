@@ -78,6 +78,17 @@ def report_lines(value, command, root, verbose):
     context = value["context"]
     lines = [f"{value['name']} | {context['scenario']} / {context['configuration']}",
              f"Gate: {'PASS' if value['gate'] else 'OPEN'} | Policy: {value['policy']['name']} | Baseline: {value['baseline']['status']}", ""]
+    if value.get("baseline_changes"):
+        lines.extend(["Changes since obligation review", *value["baseline_changes"]])
+    comparison = value.get("comparison")
+    if comparison:
+        lines.append("Compared with " + (comparison["previous_date"] or "first verification"))
+        lines.extend(comparison["changes"])
+        lines.extend(f"{row['analysis']}: {row['reason']}" for row in comparison["decisions"])
+    if value.get("revision"):
+        lines.append("Evaluated source: " + value["revision"]["state"])
+    for name, gate in value.get("gates", {}).items():
+        lines.append(f"{name}: " + ("PASS" if gate["gate"] else "OPEN - " + ", ".join(gate["reasons"])))
     project_flag = f" --project {quote(root)}" if root else ""
     executed = set(value.get("executed", []))
     analyses = value["analyses"]
@@ -187,7 +198,7 @@ def render(value, command=None, root=None, verbose=False):
             c = report["context"]
             lines.append(f"{'PASS' if report['gate'] else 'OPEN':8} {c['point']} | {c['scenario']} / {c['configuration']} | {report['id']}")
     elif command == "history" and "report" in value:
-        lines = ["Saved snapshot (not current project state)", *report_lines(value["report"], "history", root, verbose)]
+        lines = ["Saved snapshot (not current project state)", *report_lines({**value["report"], "comparison": value.get("comparison", value["report"].get("comparison"))}, "history", root, verbose)]
     elif command == "history" and "run" in value:
         run = value["run"]
         lines = [f"Saved run: {run['id']}", f"Analysis: {run['analysis']}", f"Started: {run['started_at']}"]
