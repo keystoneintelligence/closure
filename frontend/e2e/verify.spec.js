@@ -68,3 +68,39 @@ test('edit → selective Verify → explanation → immutable history, using key
   await expect(page.getByRole('button',{name:'Verify',exact:true})).toBeDisabled();
   expect(errors).toEqual([]);
 });
+
+test('composed power history and project navigation', async ({page, serviceURL}, testInfo) => {
+  await page.goto(serviceURL);
+  await page.getByLabel('Load project').selectOption({label: 'Assembly power budget'});
+  await expect(page.getByRole('heading', {name: 'Project structure'})).toBeVisible();
+  async function verify() {
+    const response = page.waitForResponse(r => r.url().endsWith('/api/verify'));
+    await page.getByRole('button', {name: 'Verify', exact: true}).click();
+    const report = await (await response).json();
+    await expect(page.getByText('Saved verification snapshot', {exact:true})).toBeVisible();
+    return report;
+  }
+  const first = await verify();
+  expect(first.gate).toBe(true);
+  await page.getByRole('button', {name:'Return to current project'}).click();
+  await page.getByRole('button', {name:'Variables',exact:true}).click();
+  await page.locator('[data-variable="system::budget.maximum"]').click();
+  await page.getByLabel('Value (W)').fill('100');
+  await page.getByRole('button', {name:'Save change'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  const second = await verify();
+  expect(second.gate).toBe(false);
+  expect(second.executed).toEqual([]);
+  await page.getByRole('button', {name:'Overview',exact:true}).click();
+  await expect(page.getByText(/limit changed from 110 W to 100 W/)).toBeVisible();
+  const panel = page.locator('.composition').first();
+  await panel.getByText('Execution and reuse').click();
+  await expect(panel.getByText(/Reused the verified run/).first()).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('composed-power.png')});
+  await page.locator('.composition [data-explain="system::budget.power"]').click();
+  await expect(page.getByRole('dialog')).toContainText('104');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Evidence',exact:true}).click();
+  await page.locator('[data-snapshot="' + first.id + '"]').click();
+  await expect(page.getByText('Recorded scope closed')).toBeVisible();
+});

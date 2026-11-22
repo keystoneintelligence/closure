@@ -35,7 +35,7 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
 class Viewer:
     def __init__(self, project, workspace=None, trusted=False):
-        selected = Project(project)
+        selected = Project(project, workspace)
         self.project = selected.root
         self.manifest_path = selected.manifest_path
         self.workspace = Path(workspace).resolve() if workspace else self.project.parent
@@ -51,17 +51,17 @@ class Viewer:
             if any(name in files for name in ("project.yaml", "project.yml", "project.json")):
                 path=Path(directory)
                 try:
-                    project=Project(path)
+                    project=Project(path, self.workspace)
                     found.append({"path":str(path.relative_to(self.workspace)),"name":project.manifest.name or project.manifest.project,"id":project.manifest.project})
                 except (ClosureError, ValueError, OSError):
                     continue
         if not any(p["path"] == str(self.project.relative_to(self.workspace)) for p in found):
-            selected = Project(self.manifest_path)
+            selected = Project(self.manifest_path, self.workspace)
             found.append({"path":str(self.project.relative_to(self.workspace)), "name":selected.manifest.name or selected.manifest.project, "id":selected.manifest.project})
         return found
 
     def engine(self, scenario=None, configuration=None):
-        project=Project(self.manifest_path)
+        project=Project(self.manifest_path, self.workspace)
         return Engine(project, scenario or next(iter(project.manifest.scenarios), "nominal"),
                       configuration or next(iter(project.manifest.configurations), "default"))
 
@@ -132,6 +132,10 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                     if query.get("report"):
                         return self.respond(explain_saved_report(EvidenceStore(app.project).load_report(query["report"][0]),query.get("id",[""])[0]))
                     return self.respond(app.engine(query.get("scenario",[None])[0],query.get("configuration",[None])[0]).explain(query.get("id",[""])[0]))
+                if parsed.path == "/api/compare":
+                    from .assessment_history import compare_reports
+                    store = EvidenceStore(app.project)
+                    return self.respond(compare_reports(store.load_report(query["base"][0]), store.load_report(query["report"][0])))
                 if parsed.path=="/api/history":
                     return self.respond(EvidenceStore(app.project).history())
                 if parsed.path=="/api/runs":
@@ -146,9 +150,10 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                     if path.is_file():
                         path=EvidenceStore(app.project).artifact_path({"sha256":sha})
                     else:
-                        for datum in Project(app.manifest_path).parameters.values():
+                        selected = Project(app.manifest_path, app.workspace)
+                        for key, datum in selected.parameters.items():
                             if datum.type=="artifact":
-                                candidate=within(app.project,datum.path)
+                                candidate=within(selected.source_root(key),datum.path)
                                 if candidate.is_file() and file_digest(candidate)==sha:
                                     path=candidate
                                     break
@@ -160,7 +165,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                         module=next((m for m in report["model"]["modules"] if m["module"]==identifier),None)
                         if module is None: return self.respond({"error":"Unknown module in this snapshot"},404)
                         return self.respond({"name":identifier+" — saved normalized contract", "text":json.dumps(module,indent=2)})
-                    project=Project(app.manifest_path); identifier=query.get("module",[""])[0]
+                    project=Project(app.manifest_path, app.workspace); identifier=query.get("module",[""])[0]
                     if identifier not in project.modules: return self.respond({"error":"Unknown module"},404)
                     path=Path(project.locations[identifier])
                     return self.respond({"name":path.name,"text":path.read_text(encoding="utf-8")})
@@ -193,7 +198,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                 if self.path=="/api/open":
                     path=(app.workspace/body["path"]).resolve()
                     if not path.is_relative_to(app.workspace): raise ClosureError("Project is outside the viewer workspace", "PATH_ESCAPE")
-                    selected=Project(path)
+                    selected=Project(path, app.workspace)
                     app.project=selected.root
                     app.manifest_path=selected.manifest_path
                     return self.respond(app.snapshot())
@@ -202,7 +207,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
                 if body.get("report"):
                     raise ClosureError("Historical snapshots are read-only. Return to the current project before changing it.", "HISTORY_READ_ONLY")
                 if self.path=="/api/parameters":
-                    result=patch_parameters(app.manifest_path,body["source_hash"],body["changes"])
+                    result=patch_parameters(app.manifest_path,body["source_hash"],body["changes"],workspace=app.workspace)
                     return self.respond(result)
                 if self.path in ("/api/build", "/api/verify"):
                     if not app.trusted: raise ClosureError("Start viewer with --trusted to enable project execution", "TRUST_REQUIRED")
