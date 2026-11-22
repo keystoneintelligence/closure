@@ -4,7 +4,6 @@ from __future__ import annotations
 import fnmatch
 import itertools
 import operator
-import os
 import errno
 import time
 import uuid
@@ -36,10 +35,7 @@ class Engine:
             self.owner_stores[key] = stores[root]
         self.run_stores = dict(self.owner_stores)
         self.record_stores = {}
-        for key, store in self.owner_stores.items():
-            directory = store.root if store.root.exists() else store.root.parent
-            if store.root != self.store.root and not os.access(directory, os.W_OK):
-                self.run_stores[key] = self.store
+        self.owner_versions = {}
         manifest = self.project.manifest
         scenario = scenario if scenario is not None else next(iter(manifest.scenarios), None)
         configuration = configuration if configuration is not None else next(iter(manifest.configurations), None)
@@ -124,7 +120,11 @@ class Engine:
             name = self.project.evidence_id(binding.ref, identifier)
             if binding.ref in self.parameters:
                 parameter = self.parameters[binding.ref]
-                identities[name] = {"source": parameter.model_dump(), "resolved": self.values.get(binding.ref)}
+                resolved = self.values.get(binding.ref)
+                if resolved and parameter.type == "artifact":
+                    # The runner consumes staged bytes under their original name.
+                    resolved = {field: value for field, value in resolved.items() if field != "path"}
+                identities[name] = {"source": parameter.model_dump(), "resolved": resolved}
             else:
                 producer = self.project.producers[binding.ref]
                 identities[name] = {"producer": self.keys.get(producer), "run": self.records.get(producer, {}).get("record_hash")}
@@ -138,12 +138,16 @@ class Engine:
                     "executable": {"path": executable, "sha256": file_digest(executable)}, "tools": self.tools[identifier], "inputs": identities, "context": self.context}
         self.keys[identifier] = digest(identity)
         key, slot = self.keys[identifier], self._slot(identifier)
-        store = self.run_stores[identifier]
+        store = self.owner_stores[identifier]
+        if store.root != self.store.root:
+            # A read-only mount may only reveal its permissions when the first write fails.
+            # A locally retained run stays active until the owner publishes or withdraws its run.
+            owner_version = {"source": store.root.parent.relative_to(self.project.workspace).as_posix(),
+                             "run": store.active_version(key)}
+            self.owner_versions[identifier] = owner_version
+            if self.store.index().get("local_fallbacks", {}).get(key) == owner_version:
+                store = self.store
         state, record = store.lookup(key, slot)
-        owner_store = self.owner_stores[identifier]
-        if store.root != owner_store.root and not record and key not in store.index()["keys"]:
-            store = owner_store
-            state, record = store.lookup(key, slot)
         if analysis.run.uncontrolled_dependencies or (analysis.run.stochastic and analysis.run.seed is None):
             state, record = "stale" if state == "current" else state, None
         blocked = any(self.states.get(dependency) != "current" for dependency in self.project.dependencies[identifier])
@@ -182,7 +186,9 @@ class Engine:
     def build(self, trusted=False, force=False, progress=None):
         if not trusted:
             raise ClosureError("Execution requires explicit trusted=True or --trusted", "TRUST_REQUIRED")
+        self.run_stores = dict(self.owner_stores)
         with ExitStack() as locks:
+            self.owner_versions = {}
             roots = {self.project.root, *(store.root.parent for store in self.run_stores.values())}
             for root in sorted(roots):
                 try:
@@ -252,10 +258,16 @@ class Engine:
                 if self.states[identifier] == "current" and not force:
                     notify("cached")
                     continue
+                store = self.run_stores[identifier]
+                if store.root != self.owner_stores[identifier].root:
+                    store.invalidate(self.keys[identifier], fallback_for=self.owner_versions[identifier])
+                elif force:
+                    if self.record_stores.get(identifier) is self.store and store is not self.store:
+                        self.store.invalidate(self.keys[identifier])
+                    store.invalidate(self.keys[identifier])
                 if force:
                     # A failed forced rerun cannot leave an old passing record
                     # available to dependent analyses or requirement assessment.
-                    self.run_stores[identifier].invalidate(self.keys[identifier])
                     self.records.pop(identifier, None)
                     for name in analysis.outputs:
                         self.values.pop(f"{identifier}.{name}", None)
@@ -269,10 +281,10 @@ class Engine:
                 except KeyError as exc:
                     raise ClosureError(f"Missing input artifact/value {exc}", "MISSING_INPUT") from exc
                 notify("running", reason="forced" if force else self.states[identifier])
-                record = self.run_stores[identifier].execute(self.project, identifier, analysis, self.keys[identifier], self._slot(identifier),
+                record = store.execute(self.project, identifier, analysis, self.keys[identifier], self._slot(identifier),
                                             self.context, inputs, self.sources[identifier], self.environment,
                                             {self.project.evidence_id(dep, identifier): self.records[dep]["record_hash"] for dep in sorted(self.project.dependencies[identifier])}, self.tools[identifier])
-                self._use_record(identifier, record, self.run_stores[identifier])
+                self._use_record(identifier, record, store)
                 self.executed.append(identifier)
                 notify("completed", seconds=time.monotonic() - started)
             except ClosureError as exc:
@@ -281,6 +293,10 @@ class Engine:
                 notify(self.states[identifier], error=exc.as_dict())
         report = self.report()
         if self.project.composition:
+            for key, version in self.owner_versions.items():
+                owner = self.owner_stores[key]
+                if self.run_stores[key].root != owner.root and owner.active_version(self.keys[key]) != version["run"]:
+                    raise ClosureError("Owner evidence changed during verification; retry", "SOURCE_CONFLICT", key)
             current = Project(self.project.manifest_path, self.project.boundary)
             if (current.source_hash != self.project.source_hash or self.invocation_inputs() != (self.pinned_sources, self.input_files)
                     or revision(self.project.workspace, self.input_files) != self.revision):

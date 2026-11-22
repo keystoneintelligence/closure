@@ -131,6 +131,10 @@ class EvidenceStore:
         path = self.root / "index.json"
         return read_json(path) if path.exists() else {"keys": {}, "history": {}}
 
+    def active_version(self, key):
+        index = self.index()
+        return index["keys"].get(key) or index.get("withdrawals", {}).get(key)
+
     def artifact_path(self, value):
         checksum = value.get("sha256", "")
         if not isinstance(checksum, str) or not re.fullmatch(r"[a-f0-9]{64}", checksum):
@@ -267,10 +271,15 @@ class EvidenceStore:
             return "missing", None
         return ("stale" if index["history"].get(slot) else "missing"), None
 
-    def invalidate(self, key):
+    def invalidate(self, key, *, fallback_for=None):
         """Withdraw reusable support before a forced attempt; retain history."""
         index = self.index()
         index["keys"][key] = None
+        index.setdefault("withdrawals", {})[key] = uuid.uuid4().hex
+        if fallback_for is not None:
+            index.setdefault("local_fallbacks", {})[key] = fallback_for
+        else:
+            index.get("local_fallbacks", {}).pop(key, None)
         atomic_json(self.root / "index.json", index)
 
     def publish(self, record, slot):
@@ -282,6 +291,7 @@ class EvidenceStore:
         atomic_json(path, record)
         index = self.index()
         index["keys"][record["execution_key"]] = record["id"]
+        index.get("withdrawals", {}).pop(record["execution_key"], None)
         index["history"].setdefault(slot, []).append(record["id"])
         atomic_json(self.root / "index.json", index)
         return record

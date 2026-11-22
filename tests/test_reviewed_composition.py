@@ -299,19 +299,48 @@ def test_reviewed_artifacts_export_before_and_after_root_verify(assembly, tmp_pa
 
 
 def test_read_only_supplier_can_be_linked_and_rebuilt_locally(assembly, monkeypatch):
-    import os
+    import errno
+    from closure import engine
     child = require_review(assembly, "electronics")
     approve(assembly)
     verify(child)
     review_child(child)
-    access = os.access
-    monkeypatch.setattr(os, "access", lambda path, mode: False if path == child / ".closure" else access(path, mode))
+    lock = engine.project_lock
+    def restrict(directory):
+        if directory == child:
+            raise OSError(errno.EROFS, "Read-only filesystem")
+        return lock(directory)
+    monkeypatch.setattr(engine, "project_lock", restrict)
     first = verify(assembly)
     key = "electronics::load.local_budget"
     assert first["gate"] and "electronics::load.scale" not in first["executed"]
     forced = verify(assembly, force=True)
     assert not forced["gate"] and requirement(forced, key)["review"] is None
     assert requirement(Engine(assembly).plan(), key)["evidence"] == requirement(forced, key)["evidence"]
+
+
+def test_local_fallback_remains_visible_after_a_write_permission_error(assembly, monkeypatch):
+    import errno
+    from closure import engine
+    child = require_review(assembly, "electronics")
+    approve(assembly)
+    lock = engine.project_lock
+    def restrict(directory):
+        if directory == child:
+            raise PermissionError(errno.EACCES, "Read-only mount")
+        return lock(directory)
+    monkeypatch.setattr(engine, "project_lock", restrict)
+    fresh = verify(assembly)
+    key = "electronics::load.local_budget"
+    assert requirement(fresh, key)["freshness"] == "current"
+    assert requirement(Engine(assembly).plan(), key)["evidence"] == requirement(fresh, key)["evidence"]
+    record_review(Engine(assembly), key, "accepted", "Assessor", "Reviewed locally retained evidence")
+    assert verify(assembly)["gate"]
+    # When the owner publishes a newer run, the parent retires its local fallback.
+    monkeypatch.setattr(engine, "project_lock", lock)
+    verify(child, force=True)
+    renewed = verify(assembly)
+    assert not renewed["gate"] and requirement(renewed, key)["review"] is None
 
 
 def test_replacing_declared_limit_tool_reopens_approval(assembly, tmp_path, monkeypatch):
@@ -328,6 +357,28 @@ def test_replacing_declared_limit_tool_reopens_approval(assembly, tmp_path, monk
     plan = Engine(assembly).plan()
     assert plan["baseline"]["status"] == "changed"
     assert any("executable calibrator changed" in line for line in plan["baseline_changes"])
+
+
+def test_restored_artifact_inputs_keep_exact_review_across_checkout_paths(assembly, tmp_path):
+    child = require_review(assembly, "electronics")
+    def add_dataset(d):
+        d["parameters"] = {"dataset": {"type": "artifact", "path": "samples.csv"}}
+        d["analyses"]["scale"]["inputs"]["dataset"] = {"ref": "load.dataset"}
+    edit_yaml(child / "model/load.yaml", add_dataset)
+    (child / "samples.csv").write_text("observation\n52\n")
+    approve(child)
+    approve(assembly)
+    verify(child)
+    review_child(child)
+    key = "electronics::load.local_budget"
+    evidence = requirement(Engine(child).plan(), key)["evidence"]
+    restored = tmp_path / "another-checkout"
+    shutil.copytree(assembly, restored)
+    report = verify(restored)
+    assert report["gate"] and requirement(report, key)["evidence"] == evidence
+    (restored / "electronics/samples.csv").write_text("observation\n53\n")
+    changed = verify(restored)
+    assert not changed["gate"] and requirement(changed, key)["review"] is None
 
 
 def test_nested_limit_files_inputs_and_validity_are_baselined(assembly):
