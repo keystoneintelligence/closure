@@ -1,5 +1,7 @@
 # Closure project viewer
 
+Open Project structure on Overview or System map to inspect children and shared suppliers. Saved reports show Assessment changes, baseline differences, and Execution and reuse. In Evidence, choose a saved comparison from the same context.
+
 The viewer runs on your computer and uses the same project loader, planner, runner, and assessment code as the CLI. It discovers projects inside an explicitly selected workspace and loads their contracts and current evidence.
 
 ```powershell

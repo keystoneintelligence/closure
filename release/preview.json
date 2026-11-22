@@ -1,11 +1,11 @@
 {
   "name": "Closure",
-  "implementation_version": "0.1.0a1",
-  "viewer_version": "0.1.0-alpha.1",
-  "specification_version": "closure/0.1",
+  "implementation_version": "0.2.0a1",
+  "viewer_version": "0.2.0-alpha.1",
+  "specification_version": "closure/0.2",
   "specification_revision": "preview.1",
   "runner_protocol": "closure-run/0.1",
-  "viewer_api": "closure-viewer/0.1",
+  "viewer_api": "closure-viewer/0.2",
   "proposed_license": "Apache-2.0",
   "copyright_owner": "Keystone Intelligence LLC",
   "website_url": "https://www.keystoneintelligence.ai/",
@@ -13,10 +13,10 @@
   "security_contact": "https://github.com/keystoneintelligence/closure/security/advisories/new",
   "approvals": {
     "license_and_ownership": true,
-    "public_contents": true,
-    "publish": true
+    "public_contents": false,
+    "publish": false
   },
-  "release_tag": "v0.1.0a1",
+  "release_tag": "v0.2.0a1",
   "onboarding": {
     "status": "deferred_to_preview",
     "reason": "Owner accepted collecting independent onboarding feedback during the early public preview on 2026-10-12. No independent result is claimed."

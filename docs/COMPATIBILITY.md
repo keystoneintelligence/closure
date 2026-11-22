@@ -1,14 +1,16 @@
 # Preview compatibility
 
+Composed manifests and reports use 0.2. Standalone sources and historical reports retain 0.1. The paired viewer API is closure-viewer/0.2.
+
 | Product/boundary | Candidate | Commitment |
 | --- | --- | --- |
 | Source specification | `closure/0.1`, `preview.1` | Explicit schema version; breaking meanings require a new version |
 | Runner exchange | `closure-run/0.1` | Any language; strict typed stdin/stdout exchange |
 | Evidence, report, review | `closure-evidence/0.1`, `closure-report/0.1`, `closure-review/0.1` | Preserve original objects and digests; no rewriting historical defaults |
-| Python distribution / CLI | `closure-se==0.1.0a1` | Alpha; commands and JSON changes documented in changelog |
+| Python distribution / CLI | `closure-se==0.2.0a1` | Alpha; commands and JSON changes documented in changelog |
 | Python import API | bundled reference backend | Provisional; pin the exact distribution |
-| Viewer | `0.1.0-alpha.1`, bundled in the wheel | Install with matching backend; no separate npm release |
-| Viewer HTTP API | `closure-viewer/0.1` | Local/provisional; negotiation required by the bundled client |
+| Viewer | `0.2.0-alpha.1`, bundled in the wheel | Install with matching backend; no separate npm release |
+| Viewer HTTP API | `closure-viewer/0.2` | Local/provisional; negotiation required by the bundled client |
 
 The candidate targets Python 3.10 and 3.12 on Windows and Linux. CI also tests Node 22 for building the viewer and the independent runner. Browser coverage is desktop Chromium and Firefox; other browsers, macOS, mobile and screen-reader support are not certified by this preview. See the release review for actual executed checks versus planned CI coverage.
 

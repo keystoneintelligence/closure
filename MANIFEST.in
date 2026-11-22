@@ -9,7 +9,7 @@ recursive-include conformance *.json *.md *.yaml *.mjs
 recursive-include tools *.py
 recursive-include tests *.py
 recursive-include frontend *.js *.json
-recursive-include examples *.yaml *.yml *.py *.md *.blend baseline.json
+recursive-include examples .closure-workspace *.yaml *.yml *.py *.md *.blend baseline.json
 recursive-include .github *.yml
 include release/preview.json release/ONBOARDING_REVIEW.md
 include release/dependency-snapshots.json

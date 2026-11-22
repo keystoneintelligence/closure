@@ -4,7 +4,7 @@ Engineering evidence you can follow.
 
 Closure connects requirements, inputs, analyses and results in readable project files. Change an input and press **Verify**: affected analyses rerun, outputs propagate, and each requirement shows the evidence behind its result.
 
-This is the **0.1.0a1 early release candidate**. Keystone Intelligence LLC develops Closure as a general-purpose engineering tool. The examples cover service capacity, electrical power, mission analysis and mechanical design.
+This branch prepares the **0.2.0a1 local composition preview**. Start with the [four-project power budget](examples/composed-power/README.md) and [composition specification](spec/0.2/COMPOSITION.md). Keystone Intelligence LLC develops Closure as a general-purpose engineering tool. The examples cover service capacity, electrical power, mission analysis and mechanical design.
 
 ## Three ways to use Closure
 
@@ -18,7 +18,7 @@ The specification is language-neutral at the runner boundary. The reference impl
 
 ## Try the candidate
 
-Use Python 3.10 or 3.12 on Windows or Linux. In an activated virtual environment, download the wheel from the [v0.1.0a1 release](https://github.com/keystoneintelligence/closure/releases/tag/v0.1.0a1) and install it:
+For the composition preview, install this checkout with `python -m pip install .` in a virtual environment. For the previous published 0.1 preview, download the wheel from the [v0.1.0a1 release](https://github.com/keystoneintelligence/closure/releases/tag/v0.1.0a1) and install it:
 
 ```sh
 python -m pip install ./closure_se-0.1.0a1-py3-none-any.whl
