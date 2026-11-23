@@ -95,7 +95,7 @@ def make_parser():
         if name in ("build", "verify", "sweep", "serve"):
             command.add_argument("--trusted", action="store_true", help="Allow execution of project analysis programs")
         if name in ("build", "verify"):
-            command.add_argument("--force", action="store_true", help="Rerun all analyses, including those with current evidence")
+            command.add_argument("--force", action="store_true", help="Rerun all analyses selected for this context, including those with current evidence")
         if name == "format":
             command.add_argument("--check", action="store_true", help="Read-only style check; exit 1 when formatting is needed")
         if name == "serve":

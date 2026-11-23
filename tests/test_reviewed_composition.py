@@ -1,6 +1,7 @@
 """Changes to the criterion, evidence, context and policy have distinct review consequences."""
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -91,6 +92,25 @@ def test_calculated_allowance_and_actual_change_independently(assembly, tmp_path
     with pytest.raises(ClosureError, match="Source not found"):
         approve(assembly)
     assert EvidenceStore(assembly).load_report(accepted["id"])["gate"]
+
+
+def test_inactive_calculated_limit_still_contributes_to_revision(assembly):
+    model = install_allowance(assembly)
+    for manifest in assembly.rglob("project.yaml"):
+        edit_yaml(manifest, lambda d: d.update(scenarios={"nominal": {}, "high_load": {}}))
+    edit_yaml(model, lambda d: d["requirements"]["power"].update(applies_to=["high_load"]))
+    approve(assembly)
+    subprocess.run(["git", "init", "-q"], cwd=assembly, check=True)
+    subprocess.run(["git", "add", "."], cwd=assembly, check=True)
+    subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                    "commit", "-qm", "Review high-load power allowance"], cwd=assembly, check=True)
+
+    (assembly / "calibration.py").write_text("offset = 5\n")
+    report = Engine(assembly, scenario="nominal").verify(trusted=True)
+    assert requirement(report, "system::budget.power")["applicability"] == "not_applicable"
+    assert "system::budget.allowance" not in {analysis["id"] for analysis in report["analyses"]}
+    assert report["baseline"]["status"] == "changed"
+    assert report["revision"]["files"] == ["calibration.py"]
 
 
 def require_review(root, child):

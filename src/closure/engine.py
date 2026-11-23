@@ -22,20 +22,15 @@ from .editing import project_lock
 OPS = {"lte": operator.le, "gte": operator.ge, "lt": operator.lt, "gt": operator.gt, "eq": operator.eq, "ne": operator.ne}
 
 
+def _passing_alternative(branches):
+    passing = [b for b in branches if b["verdict"] == "pass" and b["execution"] == "complete"]
+    return ([b for b in passing if b["evidence_allowed"]] or passing)[:1]
+
+
 class Engine:
     def __init__(self, project: Project | str | Path, scenario=None, configuration=None, overrides=None, point="baseline"):
         self.project = project if isinstance(project, Project) else Project(project)
         self.store = EvidenceStore(self.project.root)
-        stores = {self.project.root: self.store}
-        self.owner_stores = {}
-        for key in self.project.order:
-            root = self.project.source_root(key)
-            if root not in stores:
-                stores[root] = EvidenceStore(root)
-            self.owner_stores[key] = stores[root]
-        self.run_stores = dict(self.owner_stores)
-        self.record_stores = {}
-        self.owner_versions = {}
         manifest = self.project.manifest
         scenario = scenario if scenario is not None else next(iter(manifest.scenarios), None)
         configuration = configuration if configuration is not None else next(iter(manifest.configurations), None)
@@ -56,6 +51,21 @@ class Engine:
                 combined.update({unit.qualify(k): v for k, v in local.items()})
             combined.update(overrides or {})
         self.parameters = self.project.resolve_parameters(combined)
+        self.applicable_requirements = {
+            key for key, requirement in self.project.requirements.items()
+            if scenario in requirement.applies_to and configuration in requirement.configurations
+        }
+        self.work_order = self.project.analysis_order(self.applicable_requirements.intersection(self.project.scope))
+        stores = {self.project.root: self.store}
+        self.owner_stores = {}
+        for key in self.work_order:
+            root = self.project.source_root(key)
+            if root not in stores:
+                stores[root] = EvidenceStore(root)
+            self.owner_stores[key] = stores[root]
+        self.run_stores = dict(self.owner_stores)
+        self.record_stores = {}
+        self.owner_versions = {}
         self.environment = environment_identity()
         self.states, self.records, self.keys, self.sources, self.values = {}, {}, {}, {}, {}
         self.tools = {}
@@ -171,7 +181,7 @@ class Engine:
 
     def plan(self):
         self.executed = []
-        for identifier in self.project.order:
+        for identifier in self.work_order:
             try:
                 self._prepare(identifier)
             except ClosureError as exc:
@@ -180,7 +190,7 @@ class Engine:
         return self.report()
 
     def verify(self, trusted=False, force=False, progress=None):
-        """Refresh affected evidence, or rerun every analysis when force is set."""
+        """Refresh the selected context's evidence, rerunning its producers when forced."""
         return self.build(trusted=trusted, force=force, progress=progress)
 
     def build(self, trusted=False, force=False, progress=None):
@@ -210,7 +220,8 @@ class Engine:
         files = dict(self.project.document_hashes)
         sources = {}
         _, limit_producers = self.project.limit_dependencies()
-        for key in self.project.order:
+        # Calculated limits also contribute to the context-independent obligation baseline.
+        for key in sorted(set(self.work_order) | limit_producers):
             root = self.project.source_root(key)
             try:
                 sources[key] = source_snapshot(self.project, self.project.analyses[key], root)
@@ -248,9 +259,9 @@ class Engine:
         def notify(event, **details):
             if progress:
                 progress({"event": event, "analysis": identifier, "index": index,
-                          "total": len(self.project.order), "context": dict(self.context), **details})
+                          "total": len(self.work_order), "context": dict(self.context), **details})
 
-        for index, identifier in enumerate(self.project.order, 1):
+        for index, identifier in enumerate(self.work_order, 1):
             analysis = self.project.analyses[identifier]
             started = time.monotonic()
             try:
@@ -361,19 +372,18 @@ class Engine:
 
     def assess(self, identifier, baseline, reviews, linked_reviews=()):
         requirement = self.project.requirements[identifier]
-        applicable = self.context["scenario"] in requirement.applies_to and self.context["configuration"] in requirement.configurations
+        applicable = identifier in self.applicable_requirements
         conditions = criteria(requirement.verify)
         sources = [binding.ref for c in conditions for binding in refs(c)]
         producers = sorted({self.project.producers[ref] for ref in sources if ref in self.project.producers})
         alternative = bool(conditions) and not isinstance(requirement.verify, Criterion) and requirement.verify.any_of is not None
         policy = self.project.policy_for(identifier)
-        branches = [self._criterion_support(c, i, policy) for i, c in enumerate(conditions)]
+        branches = [self._criterion_support(c, i, policy) for i, c in enumerate(conditions)] if applicable else []
         # A declared alternative needs one current passing branch. Prefer evidence
         # allowed by policy; unused alternatives must not veto its closure.
-        passing = [b for b in branches if b["verdict"] == "pass" and b["execution"] == "complete"]
-        preferred = [b for b in passing if b["evidence_allowed"]] or passing
-        support = preferred[:1] if alternative and preferred else branches
-        selected = [b["index"] for b in support] if support and (not alternative or preferred) else []
+        selected_support = _passing_alternative(branches) if alternative else branches
+        selected = [b["index"] for b in selected_support]
+        support = selected_support or branches
         freshness = "current" if support and all(b["freshness"] == "current" for b in support) else "stale" if any(b["freshness"] == "stale" for b in support) else "missing"
         executions = [b["execution"] for b in support]
         execution = "error" if "error" in executions else "blocked" if "blocked" in executions else "complete" if freshness == "current" else "not_run"
@@ -385,22 +395,39 @@ class Engine:
         classes = {c for b in support for c in b["evidence_classes"]}
         support_identity = {"requirement": self.project.native_contracts.get(identifier, requirement.model_dump()),
                             "context": self.context,
-                            "records": {self.project.evidence_id(p, identifier): self.records.get(p, {}).get("record_hash") for p in producers},
+                            "records": {self.project.evidence_id(p, identifier): self.records.get(p, {}).get("record_hash") if applicable else None
+                                        for p in producers},
                             "inputs": {self.project.evidence_id(r, identifier): self.parameters[r].model_dump() for r in sources if r in self.parameters}}
         if alternative:
             support_identity["selected_branches"] = selected
 
-        def review_signature(assessment_policy):
+        def review_signatures(assessment_policy):
             terms = assessment_policy.model_dump()
             terms["accepted_evidence"] = sorted(terms["accepted_evidence"])
-            return digest({**support_identity, "policy": terms})
+            evidence_identity = {**support_identity, "policy": terms}
+            if applicable:
+                return (digest(evidence_identity),)
 
-        signature = review_signature(policy)
+            # This decision concerns membership in the requirement's declared contexts.
+            claim = identifier if self.project.composition else f"{self.project.manifest.project}::{identifier}"
+            applicability_hash = digest({"requirement": claim, "context": self.context,
+                                         "applies_to": sorted(set(requirement.applies_to)),
+                                         "configurations": sorted(set(requirement.configurations))})
+            # Older reviews hashed evidence. Only the pre-run identity can be
+            # reproduced independently of later executions. For an alternative,
+            # a parameter-only branch could already pass under the reviewing policy.
+            if alternative:
+                available = [self._criterion_support(c, i, assessment_policy) for i, c in enumerate(conditions)
+                             if all(b.ref in self.parameters for b in refs(c))]
+                evidence_identity["selected_branches"] = [b["index"] for b in _passing_alternative(available)]
+            return (applicability_hash, digest(evidence_identity))
+
+        signatures = review_signatures(policy)
         decisions = {}
-        candidates = [(self.project.manifest.project, signature, r) for r in reviews if r.get("requirement") == identifier]
-        candidates.extend((authority, review_signature(terms), r) for authority, terms, r in linked_reviews)
+        candidates = [(self.project.manifest.project, signatures, r) for r in reviews if r.get("requirement") == identifier]
+        candidates.extend((authority, review_signatures(terms), r) for authority, terms, r in linked_reviews)
         for authority, expected, entry in candidates:
-            if entry.get("context") == self.context and entry.get("assessment_hash") == expected:
+            if entry.get("context") == self.context and entry.get("assessment_hash") in expected:
                 if authority not in decisions or entry["at"] > decisions[authority]["at"]:
                     decisions[authority] = entry
         # One authority may revise its own review. Another authority cannot lift its rejection.
@@ -428,7 +455,7 @@ class Engine:
                 "status": status, "closed": closed, "gate_allowed": gate_allowed, "comparisons": comparisons,
                 "evidence": sorted({r for b in support for r in b["evidence"]}), "evidence_classes": sorted(classes),
                 "verification_mode": "any_of" if alternative else "all_of", "branches": branches, "selected_branches": selected,
-                "assessment_hash": signature, "review": review, "dependencies": producers, "scoped": identifier in self.project.scope}
+                "assessment_hash": signatures[0], "review": review, "dependencies": producers, "scoped": identifier in self.project.scope}
 
     def report(self):
         baseline = self.baseline()
@@ -457,7 +484,7 @@ class Engine:
         gate = bool(scoped) and bool(self.project.manifest.scenarios) and bool(self.project.manifest.configurations) and baseline["status"] == "current" and all(a["gate_allowed"] for a in scoped)
         analyses = [{"id": identifier, "state": self.states.get(identifier, "missing"), "execution_key": self.keys.get(identifier),
                      "record": self.records.get(identifier), "error": self.failures.get(identifier), "will_run": self.states.get(identifier) != "current"}
-                    for identifier in self.project.order]
+                    for identifier in self.work_order]
         report = {"schema": "closure-report/0.1", "id": uuid.uuid4().hex, "created_at": utcnow(),
                 "project": self.project.manifest.project, "name": self.project.manifest.name or self.project.manifest.project,
                 "source_hash": self.project.source_hash, "context": self.context, "policy": self.project.manifest.policy.model_dump(),

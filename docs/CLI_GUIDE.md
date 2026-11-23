@@ -87,7 +87,9 @@ closure verify --trusted --force
 closure verify --trusted --verbose
 ```
 
-`--force` reruns all analyses in the selected context. `--verbose` adds recorded
+`plan` and `verify` select the producers needed by scoped requirements that apply
+to the chosen scenario and configuration. `--force` reruns those producers, including
+any shared producer, once each. `--verbose` adds recorded
 inputs, outputs, and run IDs to the report. `build` remains an alias for `verify`.
 Progress is per analysis; external solver logs are preserved in evidence rather
 than streamed live. Analyses currently execute sequentially in dependency order.
