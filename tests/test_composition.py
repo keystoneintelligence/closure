@@ -54,6 +54,59 @@ def test_containment_and_file_url(assembly):
         Project(assembly)
 
 
+@pytest.mark.parametrize("second,count", [("electronics", 1), ("cooling", 2)], ids=["duplicate-alias", "distinct-child"])
+def test_child_aliases_count_distinct_component_obligations(assembly, second, count):
+    children = {"first_component": {"path": "electronics"}, "second_component": {"path": second}}
+    edit_yaml(assembly / "project.yaml", lambda d: d.update(scope=[], children=children))
+    approve_baseline(assembly, "System Engineering", "Reviewed the component allocations")
+    report = Engine(assembly).verify(trusted=True)
+
+    assert report["projects"]["system"]["children"] == {"first_component": "electronics", "second_component": second}
+    assert set(report["scope"]) == {"electronics::load.local_budget", f"{second}::load.local_budget"}
+    assert report["gate"] and report["counts"] == {"PASS": count}
+    assert report["gates"]["system"]["applicable"] == count
+    assert report["gates"]["electronics"]["applicable"] == report["gates"][second]["applicable"] == 1
+
+
+def test_shared_profile_obligation_counts_once_in_assembly(assembly):
+    profile = assembly / "reference"
+    edit_yaml(profile / "model/load.yaml", lambda d: d.update(requirements={
+        "power": {"text": "The shared profile supplies the reference power.",
+                  "verify": {"actual": {"ref": "profile.evaluate.power"}, "op": "eq",
+                             "limit": {"ref": "profile.reference"}}}}))
+    for component in ("electronics", "cooling"):
+        edit_yaml(assembly / component / "project.yaml", lambda d: d.update(children={"profile": {"path": "../reference"}}))
+    for unit in (profile, assembly / "electronics", assembly / "cooling", assembly):
+        approve_baseline(unit, "System Engineering", "Reviewed the power allocations")
+    report = Engine(assembly).verify(trusted=True)
+
+    assert report["gate"] and report["counts"] == {"PASS": 4}
+    for component in ("electronics", "cooling"):
+        assert report["projects"][component]["children"] == {"profile": "reference"}
+    assert {key: gate["applicable"] for key, gate in report["gates"].items()} == {
+        "reference": 1, "electronics": 2, "cooling": 2, "system": 4}
+
+
+def test_assembly_requires_its_owned_component_claim(assembly):
+    child = assembly / "electronics"
+    key = "electronics::load.local_budget"
+    edit_yaml(child / "project.yaml", lambda d: d["exports"].update(allocation="load.local_budget"))
+    edit_yaml(child / "model/load.yaml", lambda d: d["requirements"]["local_budget"]["verify"]["limit"].update(value=50))
+
+    def require_allocation(manifest):
+        manifest.update(scope=[], children={"electronics": {"path": "electronics"}}, required_claims=["allocation"])
+        manifest["imports"]["allocation"] = {"path": "electronics", "export": "allocation"}
+
+    edit_yaml(assembly / "project.yaml", require_allocation)
+    for unit in (child, assembly):
+        approve_baseline(unit, "System Engineering", "Reviewed the component allocation")
+    report = Engine(assembly).verify(trusted=True)
+    assert report["scope"] == [key] and report["counts"] == {"FAIL": 1}
+    assert not report["gates"]["electronics"]["gate"] and not report["gate"]
+    assert "electronics" in report["gates"]["system"]["reasons"]
+    assert report["gates"]["system"]["applicable"] == 1
+
+
 def test_required_child_and_supplier_contract(assembly):
     local = assembly / "cooling/model/load.yaml"
     local.write_text(local.read_text().replace("value: 60", "value: 50"))

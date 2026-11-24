@@ -142,3 +142,38 @@ test('child explanation remains available when an older snapshot lacks its basel
   await expect(baseline).toContainText('Owner baseline unavailable for this assessment.');
   await expect(page.getByRole('dialog')).toContainText('Electronics reviewer');
 });
+
+test('child aliases open shared project details through either relationship', async ({page, serviceURL}) => {
+  await page.goto(serviceURL);
+  await page.route('**/api/open', async route => {
+    const response = await route.fetch();
+    const data = await response.json();
+    const {system, cooling, electronics} = data.report.projects;
+    system.children = {thermal: 'cooling', controller: 'electronics', wiring: 'electronics'};
+    cooling.children = {board: 'electronics'};
+    electronics.children = {ratings: 'reference'};
+    await route.fulfill({response, json: data});
+  });
+  await page.getByLabel('Load project').selectOption({label: 'Assembly power budget'});
+  const tree = page.locator('.composition').filter({has: page.getByRole('heading', {name: 'Project structure'})});
+  const thermal = tree.locator('summary').filter({hasText: 'thermal → cooling'});
+  const board = tree.locator('summary').filter({hasText: 'board → electronics'});
+  const target = tree.locator('[data-explain="electronics::load.local_budget"]');
+  await expect(thermal).toBeVisible();
+  await expect(board).toBeHidden();
+  await expect(target).toHaveCount(1);
+  for (const alias of ['controller', 'wiring']) {
+    const link = tree.getByRole('link', {name: `${alias} → electronics`});
+    await link.focus();
+    await page.keyboard.press('Enter');
+    await expect(tree.locator('#project-tree-electronics')).toBeFocused();
+    await expect(board).toBeVisible();
+    await expect(target).toBeVisible();
+    await expect(tree.locator('summary').filter({hasText: 'ratings → reference'})).toBeVisible();
+    await target.click();
+    await expect(page.getByRole('dialog', {name: 'electronics::load.local_budget'})).toBeVisible();
+    await page.keyboard.press('Escape');
+    await board.click();
+    await thermal.click();
+  }
+});

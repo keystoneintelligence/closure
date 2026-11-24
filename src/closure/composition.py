@@ -180,23 +180,27 @@ class Composition:
     def gates(self, assessments, baselines, requirements):
         indexed = {r["id"]: r for r in assessments}
         gates = {}
+        applicable_by_project = {}
+
         def evaluate(unit):
-            if unit.name in gates:
-                return gates[unit.name]
+            if unit.name in applicable_by_project:
+                return applicable_by_project[unit.name]
             scoped = self.local_scope(unit, requirements)
-            children = [evaluate(self.units[name]) for name in unit.children.values()]
-            applicable = sum(indexed[key]["applicability"] == "applicable" for key in scoped)
-            applicable += sum(child["applicable"] for child in children)
+            applicable = {key for key in scoped if indexed[key]["applicability"] == "applicable"}
             reasons = [key for key in scoped if not indexed[key]["gate_allowed"]]
-            reasons.extend(child["project"] for child in children if not child["gate"])
+            for child in dict.fromkeys(unit.children.values()):
+                applicable.update(evaluate(self.units[child]))
+                if not gates[child]["gate"]:
+                    reasons.append(child)
             if baselines[unit.name]["status"] != "current":
                 reasons.append("Obligation baseline " + baselines[unit.name]["status"])
             if not applicable:
                 reasons.append("No applicable obligations")
-            result = {"project": unit.name, "gate": not reasons, "applicable": applicable,
-                      "scope": scoped, "reasons": reasons}
-            gates[unit.name] = result
-            return result
+            gates[unit.name] = {"project": unit.name, "gate": not reasons, "applicable": len(applicable),
+                                "scope": scoped, "reasons": reasons}
+            applicable_by_project[unit.name] = applicable
+            return applicable
+
         evaluate(self.root)
         return gates
 
