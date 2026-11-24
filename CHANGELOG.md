@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A child can verify against a parent-owned constant with an unrelated sibling absent. Missing suppliers for calculated imports are reported with the declaring manifest, import alias and requested export. A child baseline that recorded unrelated suppliers needs one approval of the narrower contract.
 - Composed gates count each applicable requirement once by its qualified ID, including when multiple child aliases lead to the same project. The viewer keeps each alias available for navigation.
 - Requirement explanations in the CLI and viewer show the owning project's baseline status and reviewer. `explain REQUIREMENT --report ID` reads those details from the saved assessment.
 - `plan --base` traces effective scenario and configuration override changes in each participating project to the analyses and requirements that consume those inputs.

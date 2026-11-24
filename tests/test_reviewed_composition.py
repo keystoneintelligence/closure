@@ -10,6 +10,7 @@ from closure.cli import main
 from closure.engine import Engine, approve_baseline, record_review
 from closure.evidence import EvidenceStore
 from closure.io import ClosureError
+from closure.project import Project
 from closure.reporting import export_report
 from closure.viewer_server import Viewer
 from conftest import edit_yaml
@@ -316,6 +317,68 @@ def test_reviewed_artifacts_export_before_and_after_root_verify(assembly, tmp_pa
     # New evidence repairs the owner's archive, but the previous review stays bound to its original run.
     refreshed = verify(assembly)
     assert not refreshed["gate"] and requirement(refreshed, key)["review"] is None
+
+
+def test_imported_claim_pins_its_owner_baseline_inputs(assembly, monkeypatch):
+    child = assembly / "electronics"
+    key = "system::budget.positive_allocation"
+    edit_yaml(assembly / "model/budget.yaml", lambda d: d["requirements"].update(positive_allocation={
+        "text": "The system allocation is positive.",
+        "verify": {"actual": {"ref": "budget.maximum"}, "op": "gt", "limit": {"value": 0, "unit": "W"}}}))
+    edit_yaml(assembly / "project.yaml", lambda d: d.update(exports={"allocation": "budget.positive_allocation"}))
+    def require_allocation(d):
+        d["imports"]["allocation"] = {"path": "..", "export": "allocation"}
+        d["required_claims"] = ["allocation"]
+    edit_yaml(child / "project.yaml", require_allocation)
+    approve(assembly)
+    approve(child)
+    (assembly / ".gitignore").write_text(".closure/\n")
+    for args in (["init", "-q"], ["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                              "commit", "-qm", "Approved power allocations"]):
+        subprocess.run(["git", *args], cwd=assembly, capture_output=True, check=True)
+
+    # This file is part of the system approval, outside the child's computational graph.
+    relative = "cooling/model/load.yaml"
+    model = assembly / relative
+    model.write_text(model.read_text() + "\n# Reviewed allocation\n")
+    initial = verify(child)
+    assert initial["gate"] and requirement(initial, key)["closed"] and "cooling" not in initial["projects"]
+
+    engine = Engine(child)
+    assess = engine.report
+    def change_after_assessment():
+        report = assess()
+        assert report["gate"]
+        edit_yaml(model, lambda d: d["requirements"]["local_budget"]["verify"]["limit"].update(value=65))
+        return report
+    monkeypatch.setattr(engine, "report", change_after_assessment)
+    with pytest.raises(ClosureError) as conflict:
+        engine.verify(trusted=True)
+    assert conflict.value.code == "SOURCE_CONFLICT"
+    assert [r["id"] for r in engine.store.history()["reports"]] == [initial["id"]]
+    assert Engine(child).plan()["project_baselines"]["system"]["status"] == "changed"
+    assert relative in initial["revision"]["files"]
+
+
+def test_optional_supplier_baseline_reads_only_participating_projects(assembly, monkeypatch):
+    supplier = assembly / "electronics"
+    board = supplier / "board"
+    shutil.copytree(assembly / "reference", board)
+    edit_yaml(board / "project.yaml", lambda d: d.update(project="board"))
+    edit_yaml(supplier / "project.yaml", lambda d: d.update(children={"board": {"path": "board"}}))
+    edit_yaml(assembly / "project.yaml", lambda d: d["children"].pop("electronics"))
+    approve(supplier)
+    approve(assembly)
+
+    load = Project._load
+    def load_participant(project, path, model):
+        assert not path.is_relative_to(board), f"Unexpected standalone supplier dependency: {path}"
+        return load(project, path, model)
+    monkeypatch.setattr(Project, "_load", load_participant)
+    report = verify(assembly)
+    assert report["gate"] and "board" not in report["projects"]
+    assert "electronics" not in report["project_baselines"]
+    assert not requirement(report, "electronics::load.local_budget")["closed"]
 
 
 def test_read_only_supplier_can_be_linked_and_rebuilt_locally(assembly, monkeypatch):
