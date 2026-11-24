@@ -166,8 +166,14 @@ def render(value, command=None, root=None, verbose=False):
     elif command == "explain":
         item = value["requirement"]
         lines = assessment_lines(item)
+        if "snapshot" in value:
+            lines.insert(0, f"Saved snapshot {value['snapshot']}")
+        baseline = value["baseline"]
         lines += [f"Evidence: {item['freshness']} | Execution: {item['execution']} | Acceptance: {item['acceptance']}",
-                  f"Baseline: {value['baseline']['status']}", "Dependency paths:"]
+                  f"Baseline: {baseline['status'] if baseline else 'unavailable'} ({value['baseline_project']})"]
+        if baseline and baseline.get("reviewer"):
+            lines.append(f"Baseline reviewer: {baseline['reviewer']}")
+        lines.append("Dependency paths:")
         lines += ["  " + " -> ".join(path) for path in value["paths"]]
         if item.get("evidence"):
             lines.append("Evidence runs: " + ", ".join(item["evidence"]))

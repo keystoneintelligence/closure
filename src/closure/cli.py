@@ -135,6 +135,10 @@ def main(argv=None):
                         raise UsageError("--compare requires --report")
                     from .assessment_history import compare_reports
                     result["comparison"] = compare_reports(store.load_report(args.compare), result["report"])
+            elif args.command == "explain" and args.report is not None:
+                from .evidence import EvidenceStore
+                from .reporting import explain_saved_report
+                result = explain_saved_report(EvidenceStore(root).load_report(args.report), args.identifier)
             elif args.command == "export" and args.report:
                 from .reporting import export_report
                 result = export_report(path, args.output, args.report)

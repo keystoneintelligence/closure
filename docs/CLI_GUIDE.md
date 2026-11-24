@@ -68,8 +68,10 @@ environment were already verified, matching evidence is reused instead. The
 report includes its absolute saved path. `closure history --report ID` reopens
 that immutable snapshot; it does not claim the current project still passes.
 
-`explain` shows the criterion, evidence freshness, execution/acceptance state,
-and dependency paths such as:
+`explain` shows the criterion, evidence freshness, execution and acceptance state,
+and the baseline status and reviewer for the project that owns the requirement.
+Use `closure explain REQUIREMENT --report ID` to inspect the original assessment
+after a later review. A dependency path shows how evidence reaches the requirement.
 
 ```text
 workload.arrival_rate -> platform.capacity -> platform.capacity.headroom -> operations.CAP-001

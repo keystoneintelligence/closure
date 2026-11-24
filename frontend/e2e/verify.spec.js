@@ -86,6 +86,10 @@ test('composed power history and project navigation', async ({page, serviceURL},
   const structure = page.locator('.composition').filter({has: page.getByRole('heading', {name: 'Project structure'})});
   await structure.locator('summary').filter({hasText:/electronics/i}).click();
   await structure.locator('[data-explain="electronics::load.local_budget"]').click();
+  const baseline = page.getByRole('region', {name: 'Obligation baseline'});
+  await expect(baseline.getByText('electronics', {exact: true})).toBeVisible();
+  await expect(baseline.getByText('current', {exact: true})).toBeVisible();
+  await expect(baseline.getByText('Closure example', {exact: true})).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Electronics reviewer');
   await expect(page.getByRole('dialog')).toContainText('Checked the component allocation.');
   await page.keyboard.press('Escape');
@@ -95,6 +99,12 @@ test('composed power history and project navigation', async ({page, serviceURL},
   await page.getByLabel('Value (W)').fill('100');
   await page.getByRole('button', {name:'Save change'}).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
+  // The root now needs a new approval; the child's live explanation still uses its own baseline.
+  await page.getByRole('button', {name: 'Overview', exact: true}).click();
+  await structure.locator('summary').filter({hasText: /electronics/i}).click();
+  await structure.locator('[data-explain="electronics::load.local_budget"]').click();
+  await expect(baseline.getByText('current', {exact: true})).toBeVisible();
+  await page.keyboard.press('Escape');
   const second = await verify();
   expect(second.gate).toBe(false);
   expect(second.executed).toEqual([]);
@@ -105,9 +115,30 @@ test('composed power history and project navigation', async ({page, serviceURL},
   await expect(panel.getByText(/Reused the verified run/).first()).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('composed-power.png')});
   await page.locator('.composition [data-explain="system::budget.power"]').click();
+  await expect(baseline.getByText('system', {exact: true})).toBeVisible();
+  await expect(baseline.getByText('changed', {exact: true})).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('104');
   await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Evidence',exact:true}).click();
   await page.locator('[data-snapshot="' + first.id + '"]').click();
   await expect(page.getByText('Recorded scope closed')).toBeVisible();
+});
+
+test('child explanation remains available when an older snapshot lacks its baseline', async ({page, serviceURL}) => {
+  await page.goto(serviceURL);
+  await page.getByLabel('Load project').selectOption({label: 'Assembly power budget'});
+  await expect(page.getByRole('heading', {name: 'Project structure'})).toBeVisible();
+  await page.getByRole('button', {name: 'Verify', exact: true}).click();
+  await expect(page.getByText('Saved verification snapshot', {exact: true})).toBeVisible();
+  await page.route('**/api/explain?**', async route => {
+    const response = await route.fetch();
+    const explanation = await response.json();
+    await route.fulfill({response, json: {...explanation, baseline: null}});
+  });
+  await page.locator('.composition summary').filter({hasText: /electronics/i}).click();
+  await page.locator('.composition [data-explain="electronics::load.local_budget"]').click();
+  const baseline = page.getByRole('region', {name: 'Obligation baseline'});
+  await expect(baseline).toContainText('electronics');
+  await expect(baseline).toContainText('Owner baseline unavailable for this assessment.');
+  await expect(page.getByRole('dialog')).toContainText('Electronics reviewer');
 });

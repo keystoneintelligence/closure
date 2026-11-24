@@ -8,12 +8,14 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from closure.engine import Engine
+from closure.cli import main
+from closure.engine import Engine, approve_baseline
 from closure.io import file_digest
 from closure.viewer_server import create_server
 from closure.viewer_server import VIEWER_API
 from closure import __version__
 from conftest import edit_yaml
+from test_composition import assembly
 from test_rfc_acceptance import artifact_analysis, input_power
 
 
@@ -146,6 +148,54 @@ def test_viewer_history_preserves_model_values_and_explanations(viewer, project_
     assert history["reports"][0]["id"] == built["id"]
     _, record, _ = request("/api/runs?id=" + history["runs"][0]["id"])
     assert record["run"]["outputs"]["total"]["value"] == 180
+
+
+def test_child_baseline_in_live_and_saved_explanations(viewer, assembly, capsys):
+    server, request = viewer
+    child = assembly / "electronics"
+    for component in (child, assembly / "cooling"):
+        (component / "reviews/baseline.json").unlink()
+    approve_baseline(assembly, "Assembly reviewer", "Reviewed the total demand allocation")
+    key = "electronics::load.local_budget"
+    assert request("/api/open", {"path": str(assembly.relative_to(server.app.workspace))})[0] == 200
+
+    def assert_explanations(baseline, assessment, report_id=None):
+        args = ["explain", key, "--project", str(assembly)]
+        path = "/api/explain?id=" + key
+        if report_id:
+            args.extend(["--report", report_id])
+            path += "&report=" + report_id
+        assert main([*args, "--json"]) == 0
+        cli = json.loads(capsys.readouterr().out)
+        status, api, _ = request(path)
+        assert status == 200
+        for explanation in (cli, api):
+            assert explanation["baseline"] == baseline
+            assert explanation["baseline_project"] == "electronics"
+            assert explanation["requirement"]["status"] == assessment
+            if report_id:
+                assert explanation["snapshot"] == report_id
+        assert main(args) == 0
+        human = capsys.readouterr().out
+        assert baseline["status"] in human.lower() and "Assembly reviewer" not in human
+        if baseline.get("reviewer"):
+            assert baseline["reviewer"] in human
+
+    missing = Engine(child).baseline()
+    first = Engine(assembly).verify(trusted=True)
+    assert first["baseline"]["reviewer"] == "Assembly reviewer"
+    assert "Obligation baseline missing" in first["gates"]["electronics"]["reasons"]
+    assert missing["status"] == "missing"
+    assert_explanations(missing, "REVIEW")
+
+    approve_baseline(child, "Electronics reviewer", "Reviewed the component demand allocation")
+    approved = Engine(child).baseline()
+    second = Engine(assembly).verify(trusted=True)
+    assert second["gates"]["electronics"]["gate"]
+    assert approved["status"] == "current" and approved["reviewer"] == "Electronics reviewer"
+    assert_explanations(approved, "PASS")
+    assert_explanations(missing, "REVIEW", first["id"])
+    assert_explanations(approved, "PASS", second["id"])
 
 
 def test_viewer_refuses_artifacts_whose_bytes_changed(viewer, project_dir):

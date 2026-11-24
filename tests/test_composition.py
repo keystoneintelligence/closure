@@ -10,6 +10,7 @@ from closure.cli import main
 from closure.engine import Engine, approve_baseline
 from closure.io import ClosureError
 from closure.project import Project
+from closure.reporting import explain_saved_report
 from conftest import edit_yaml
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "composed-power"
@@ -62,6 +63,31 @@ def test_required_child_and_supplier_contract(assembly):
     path.write_text(path.read_text().replace("export: load", "export: secret"))
     with pytest.raises(ClosureError, match="does not export secret"):
         Project(assembly)
+
+
+def test_value_supplier_explains_its_unscoped_requirement_without_a_gate(assembly):
+    electronics = assembly / "electronics"
+    key = "electronics::load.local_budget"
+    edit_yaml(assembly / "project.yaml", lambda d: d["children"].pop("electronics"))
+    approve_baseline(electronics, "Electronics engineer", "Reviewed the component allocation")
+    approve_baseline(assembly, "Assembly engineer", "Reviewed the supplied demand")
+    component_baseline = Engine(electronics).baseline()
+    engine = Engine(assembly)
+    saved = engine.verify(trusted=True)
+    assert saved["gate"] and "electronics" not in saved["gates"] and key not in saved["scope"]
+    assert engine.explain(key)["baseline"] == component_baseline
+
+    # Only a standalone verification of electronics needs this child project.
+    edit_yaml(electronics / "project.yaml", lambda d: d.update(children={"board": {"path": "board"}}))
+    current = Engine(assembly)
+    report = current.verify(trusted=True, force=True)
+    assert report["gate"] and "electronics::load.scale" in report["executed"]
+    assert report["values"]["system::budget.sum.total"]["value"] == 104
+    for explanation in (current.explain(key), explain_saved_report(report, key)):
+        assert explanation["baseline_project"] == "electronics" and explanation["baseline"] is None
+        assert not explanation["requirement"]["closed"]
+    archived = explain_saved_report(engine.store.load_report(saved["id"]), key)
+    assert archived["baseline_project"] == "electronics" and archived["baseline"] == component_baseline
 
 
 def test_upward_definition_and_lateral_result(assembly):
