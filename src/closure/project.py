@@ -259,6 +259,20 @@ class Project:
                 for context in groups.values():
                     self.resolve_parameters({unit.qualify(k) if unit else k: v for k, v in context.overrides.items()})
 
+    def context_overrides(self, scenario, configuration):
+        """Collect the selected overrides under their linked parameter IDs."""
+        combined = {}
+        for unit in self.composition.units.values() if self.composition else [None]:
+            manifest = unit.manifest if unit else self.manifest
+            if scenario not in manifest.scenarios or configuration not in manifest.configurations:
+                if manifest is self.manifest:
+                    raise ClosureError("Selected scenario/configuration is not declared", "UNKNOWN_CONTEXT")
+                raise ClosureError(f"{unit.name} does not declare {scenario} / {configuration}",
+                                   "UNKNOWN_CONTEXT", str(unit.path))
+            local = {**manifest.configurations[configuration].overrides, **manifest.scenarios[scenario].overrides}
+            combined.update({unit.qualify(k): v for k, v in local.items()} if unit else local)
+        return combined
+
     def resolve_parameters(self, overrides=None):
         values = dict(self.parameters)
         for identifier, override in (overrides or {}).items():

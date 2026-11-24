@@ -35,21 +35,10 @@ class Engine:
         scenario = scenario if scenario is not None else next(iter(manifest.scenarios), None)
         configuration = configuration if configuration is not None else next(iter(manifest.configurations), None)
         self.context = {"scenario": scenario, "configuration": configuration, "point": point}
-        if scenario not in manifest.scenarios or configuration not in manifest.configurations:
-            raise ClosureError("Selected scenario/configuration is not declared", "UNKNOWN_CONTEXT")
+        combined = self.project.context_overrides(scenario, configuration)
         if set(overrides or {}) & self.project.protected_parameters():
             raise ClosureError("Study or ad hoc overrides cannot alter inputs that define requirement limits; propose and review an obligation change", "OBLIGATION_CHANGE")
-        combined = {**manifest.configurations[configuration].overrides, **manifest.scenarios[scenario].overrides, **(overrides or {})}
-        if self.project.composition:
-            combined = {}
-            for unit in self.project.composition.units.values():
-                if scenario not in unit.manifest.scenarios or configuration not in unit.manifest.configurations:
-                    raise ClosureError(f"{unit.name} does not declare {scenario} / {configuration}",
-                                       "UNKNOWN_CONTEXT", str(unit.path))
-                local = {**unit.manifest.configurations[configuration].overrides,
-                         **unit.manifest.scenarios[scenario].overrides}
-                combined.update({unit.qualify(k): v for k, v in local.items()})
-            combined.update(overrides or {})
+        combined.update(overrides or {})
         self.parameters = self.project.resolve_parameters(combined)
         self.applicable_requirements = {
             key for key, requirement in self.project.requirements.items()

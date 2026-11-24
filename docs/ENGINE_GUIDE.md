@@ -85,6 +85,8 @@ Freshness, execution, numerical verdict, applicability, and acceptance remain di
 
 `plan --base REF` compiles the committed Git project and compares parameter, analysis, and requirement contracts with the working tree. It reports moved modules, changed declared/transitive sources, artifact content changes, affected analyses and requirements, context changes, and obligation changes. A prose-only requirement edit can require review without a numerical rerun. Git text normalization is respected so Windows line endings do not make every unchanged source appear modified.
 
+The plan shows work for the selected scenario and configuration. Its Git comparison reports potential impact across all selectable contexts. Each participant applies configuration overrides first and scenario overrides second. If an effective input changes, the comparison follows its consumers in both revisions, including consumers in other projects. A configuration edit masked by a scenario override in every selectable context adds no affected work.
+
 The comparison reads a bounded archive of the project subtree, rejects links/special files, and executes no analysis code. The committed baseline must compile and contain its declared sources. Git `export-ignore` attributes can omit files from that archive; such a baseline must be made complete before comparison. The source comparison reports potential impact; the current evidence plan and separately reviewed obligation baseline determine the gate. Git is optional for all other operations.
 
 ## Viewer and report export

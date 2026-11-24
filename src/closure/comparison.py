@@ -5,10 +5,11 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from itertools import product
 from pathlib import Path
 
 from .evidence import source_snapshot
-from .io import ClosureError, digest, file_digest, within
+from .io import ClosureError, canonical, digest, file_digest, within
 from .project import Project
 
 
@@ -23,6 +24,43 @@ def _changes(before, after):
     return [{"id": name, "change": "added" if name not in before else "removed" if name not in after else "modified",
              "before": before.get(name), "after": after.get(name)}
             for name in sorted(before.keys() | after.keys()) if before.get(name) != after.get(name)]
+
+
+def _context_names(project):
+    scenarios = set(project.manifest.scenarios)
+    configurations = set(project.manifest.configurations)
+    if project.composition:
+        for unit in project.composition.units.values():
+            scenarios.intersection_update(unit.manifest.scenarios)
+            configurations.intersection_update(unit.manifest.configurations)
+    return scenarios, configurations
+
+
+def _context_impact(base, project):
+    changed_inputs = set()
+    if base.source_hash == project.source_hash:
+        return False, changed_inputs
+    old_scenarios, old_configs = _context_names(base)
+    new_scenarios, new_configs = _context_names(project)
+    for scenario, config in product(old_scenarios | new_scenarios, old_configs | new_configs):
+        before = base.context_overrides(scenario, config) if scenario in old_scenarios and config in old_configs else {}
+        after = project.context_overrides(scenario, config) if scenario in new_scenarios and config in new_configs else {}
+        if not before and not after:
+            continue
+        # Omitted fields inherit from the parameter. An explicit default can
+        # therefore change an input even when the two override models compare equal.
+        declarations = [{k: canonical(v.model_dump(exclude_unset=True)) for k, v in overrides.items()}
+                        for overrides in (before, after)]
+        changes = _changes(*declarations)
+        if changes:
+            old_values = base.resolve_parameters(before)
+            new_values = project.resolve_parameters(after)
+            for change in changes:
+                key = change["id"]
+                if canonical(old_values.get(key)) != canonical(new_values.get(key)):
+                    changed_inputs.add(key)
+    names_changed = old_scenarios != new_scenarios or old_configs != new_configs
+    return names_changed or bool(changed_inputs), changed_inputs
 
 
 def compare_git(project: Project, ref: str):
@@ -96,18 +134,14 @@ def compare_git(project: Project, ref: str):
                 hashes.append(file_digest(path) if path and path.is_file() else None)
             if hashes[0] != hashes[1]:
                 artifact_changes.append({"id": identifier, "before": hashes[0], "after": hashes[1]})
-        affected = {c["id"] for items in changes.values() for c in items}
-        affected.update(c["analysis"] for c in sources)
-        affected.update(c["id"] for c in artifact_changes)
-        # Context overrides can change execution even when their source parameters do not.
-        context_changes = _changes(
-            {k: getattr(base.manifest, k) for k in ("scenarios", "configurations")},
-            {k: getattr(project.manifest, k) for k in ("scenarios", "configurations")})
-        if context_changes:
-            affected.update(project.analyses)
-            affected.update(base.analyses)
+        context_changed, changed_inputs = _context_impact(base, project)
+        seeds = {c["id"] for items in changes.values() for c in items}
+        seeds.update(c["analysis"] for c in sources)
+        seeds.update(c["id"] for c in artifact_changes)
+        seeds.update(changed_inputs)
+        affected = set(seeds)
         for version in (base, project):
-            for identifier in list(affected):
+            for identifier in seeds:
                 if identifier in version.locations or identifier in version.ports:
                     affected.update(version.impact(identifier)["affected"])
         moved = [{"module": identifier, "before": str(Path(base.locations[identifier]).relative_to(base.workspace if base.composition else base.root)).replace("\\", "/"),
@@ -116,7 +150,7 @@ def compare_git(project: Project, ref: str):
                  if Path(base.locations[identifier]).relative_to(base.workspace if base.composition else base.root) != Path(project.locations[identifier]).relative_to(boundary)]
         return {"ref": ref, "commit": commit, "changed_files": sorted(set(changed)),
                 "changes": changes, "source_changes": sources, "artifact_changes": artifact_changes, "moved_modules": moved,
-                "context_changed": bool(context_changes),
+                "context_changed": context_changed,
                 "project_changes": _changes(base.composition.describe() if base.composition else {}, project.composition.describe() if project.composition else {}),
                 "obligations_changed": digest(base.obligation_contract()) != digest(project.obligation_contract()),
                 "affected_analyses": sorted(affected & (base.analyses.keys() | project.analyses.keys())),

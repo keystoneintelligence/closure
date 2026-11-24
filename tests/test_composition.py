@@ -1,13 +1,16 @@
 """End-to-end checks for the generic, four-project power example."""
+import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from closure.engine import Engine
+from closure.cli import main
+from closure.engine import Engine, approve_baseline
 from closure.io import ClosureError
 from closure.project import Project
+from conftest import edit_yaml
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "composed-power"
 
@@ -99,6 +102,46 @@ def test_git_identity_and_dependency_reuse(assembly):
     from closure.comparison import compare_git
     diff = compare_git(Project(assembly / "cooling"), "HEAD")
     assert diff["affected_analyses"] == ["cooling::load.scale"]
+
+
+@pytest.mark.parametrize("group,name,shadowed", [("scenarios", "nominal", False),
+                                                ("configurations", "default", False),
+                                                ("configurations", "default", True)])
+def test_plan_base_tracks_child_power_override(assembly, capsys, group, name, shadowed):
+    electronics = assembly / "electronics"
+    manifest = electronics / "project.yaml"
+
+    def use_local_reference(model):
+        model["parameters"] = {"reference": {"value": 26, "unit": "W"}}
+        model["analyses"]["scale"]["inputs"]["reference"]["ref"] = "load.reference"
+
+    def configure_reference(manifest):
+        manifest[group] = {name: {"overrides": {"load.reference": {"value": 26, "unit": "W"}}}}
+        if shadowed:
+            manifest["scenarios"] = {"nominal": {"overrides": {"load.reference": {"value": 26, "unit": "W"}}}}
+
+    edit_yaml(electronics / "model/load.yaml", use_local_reference)
+    edit_yaml(manifest, configure_reference)
+    for root in (electronics, assembly):
+        approve_baseline(root, "System Engineering", "Reviewed the power allocations")
+    (assembly / ".gitignore").write_text(".closure/\n")
+    for args in (["init", "-q"], ["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                                "commit", "-qm", "Power reference values"]):
+        subprocess.run(["git", *args], cwd=assembly, capture_output=True, check=True)
+    assert Engine(assembly).verify(trusted=True)["gate"]
+
+    edit_yaml(manifest, lambda d: d[group][name]["overrides"]["load.reference"].update(value=33))
+    assert main(["plan", "--project", str(assembly), "--base", "HEAD", "--json"]) == 0
+    delta = json.loads(capsys.readouterr().out)["base_comparison"]
+    assert delta["changed_files"] == ["electronics/project.yaml"]
+    assert delta["context_changed"] == (not shadowed)
+    expected_analyses = [] if shadowed else ["electronics::load.scale", "system::budget.sum"]
+    expected_requirements = [] if shadowed else ["electronics::load.local_budget", "system::budget.power"]
+    assert delta["affected_analyses"] == expected_analyses
+    assert delta["affected_requirements"] == expected_requirements
+    report = Engine(assembly).verify(trusted=True)
+    assert report["executed"] == expected_analyses
+    assert report["gate"] == shadowed
 
 
 def test_import_contracts_empty_groups_and_context(assembly):
