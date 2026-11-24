@@ -1,7 +1,7 @@
 schema: closure/0.1
 module: profile
 owner: Test Engineering
-parameters: {reference: {value: 26, unit: W}}
+parameters: {reference: {value: 28, unit: W}}
 analyses:
   evaluate:
     run: {argv: [python, evaluate.py], sources: [evaluate.py]}
