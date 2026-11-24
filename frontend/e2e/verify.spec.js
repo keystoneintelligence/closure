@@ -58,6 +58,26 @@ test.describe('saved evidence with invalid current source', () => {
   });
 });
 
+test('a rejected context change keeps the previous report and selectors', async ({page, serviceURL}) => {
+  await page.goto(serviceURL);
+  const scenario = page.getByLabel('Scenario', {exact: true});
+  const configuration = page.getByLabel('Configuration', {exact: true});
+  await expect(scenario).toHaveValue('routine');
+  await page.route('**/api/project?scenario=surge&configuration=balanced', async route => {
+    const url = new URL(route.request().url());
+    url.searchParams.set('scenario', 'unavailable');
+    await route.fulfill({response: await route.fetch({url: url.href})});
+  });
+  await scenario.selectOption('surge');
+  await expect(page.locator('#toast')).toContainText(/scenario|context/i);
+  await expect(scenario).toHaveValue('routine');
+  await expect(configuration).toHaveValue('balanced');
+  await expect(page.getByRole('button', {name: 'Verify', exact: true})).toBeEnabled();
+  await configuration.selectOption('expanded');
+  await expect(configuration).toBeEnabled();
+  await expect(configuration).toHaveValue('expanded');
+});
+
 test('edit → selective Verify → explanation → immutable history, using keyboard dialogs',async({page,serviceURL})=>{
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(serviceURL);

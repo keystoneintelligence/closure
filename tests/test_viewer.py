@@ -196,6 +196,18 @@ def test_cold_viewer_opens_saved_evidence_with_invalid_source(fixture_name, brok
             assert api("/api/artifacts/" + artifact["sha256"])[1] == b"engineering artifact"
 
 
+def test_cold_viewer_opens_saved_report_with_ambiguous_manifests(project_dir):
+    report = Engine(project_dir).verify(trusted=True)
+    shutil.copyfile(project_dir / "project.yaml", project_dir / "project.yml")
+    with running_viewer(project_dir, project_dir) as (_, api):
+        status, error, _ = api("/api/project")
+        assert status == 400 and error["error"]["code"] == "AMBIGUOUS_MANIFEST"
+        status, saved, _ = api("/api/project?report=" + report["id"])
+        assert status == 200 and saved["mode"] == "historical" and saved["report"] == report
+        status, selected, _ = api("/api/open", {"path": "project.yml"})
+        assert status == 200 and selected["mode"] == "current"
+
+
 def test_viewer_rejects_missing_or_outside_project_paths(project_dir):
     with pytest.raises(ClosureError) as missing:
         Viewer(project_dir / "missing", project_dir)
