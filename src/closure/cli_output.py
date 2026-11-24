@@ -137,6 +137,7 @@ def report_lines(value, command, root, verbose):
     if comparison:
         lines.extend(["", f"Compared with {comparison['ref']} ({comparison['commit'][:12]})",
                       "Changed files: " + (", ".join(comparison["changed_files"]) or "none"),
+                      f"Context changed: {scalar(comparison['context_changed'])}",
                       "Affected analyses: " + (", ".join(comparison["affected_analyses"]) or "none"),
                       "Affected requirements: " + (", ".join(comparison["affected_requirements"]) or "none"),
                       f"Obligations changed: {scalar(comparison['obligations_changed'])}"])

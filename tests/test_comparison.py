@@ -32,6 +32,30 @@ def test_git_semantic_parameter_change_and_impact(committed):
     assert not result["obligations_changed"]
 
 
+@pytest.mark.parametrize("override_edit", [{"origin": "design"}, {"value": 80.0}], ids=["explicit-origin", "numeric-identity"])
+def test_git_override_impact_compares_resolved_input_identity(committed, override_edit):
+    manifest = committed / "project.yaml"
+    edit_yaml(manifest, lambda d: d["scenarios"]["nominal"].update(
+        overrides={"payload.peak_power": {"value": 80, "unit": "W"}}))
+    inherited = compare_git(Project(committed), "HEAD")
+    assert not inherited["context_changed"]
+    assert inherited["affected_analyses"] == []
+    assert inherited["affected_requirements"] == []
+
+    # Compare all declared contexts even when another scenario is the default.
+    edit_yaml(manifest, lambda d: d.update(scenarios={"idle": {}, **d["scenarios"]}))
+    subprocess.run(["git", "-c", "user.name=Closure test", "-c", "user.email=closure@example.invalid",
+                    "commit", "-qm", "Declare the nominal payload allocation", "--", "project.yaml"],
+                   cwd=committed, check=True, capture_output=True)
+    edit_yaml(manifest, lambda d: d["scenarios"]["nominal"]["overrides"]["payload.peak_power"].update(override_edit))
+    changed = compare_git(Project(committed), "HEAD")
+    assert changed["context_changed"]
+    assert changed["changes"]["parameters"] == []
+    assert changed["affected_analyses"] == ["power.budget"]
+    assert changed["affected_requirements"] == ["power.PWR-001"]
+    assert not changed["obligations_changed"]
+
+
 def test_git_semantic_prose_review_without_numerical_rerun(committed):
     edit_yaml(committed / "model/power.yaml", lambda d: d["requirements"]["PWR-001"].update(text="New meaning"))
     result = compare_git(Project(committed), "HEAD")
