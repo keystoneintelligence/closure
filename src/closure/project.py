@@ -31,8 +31,9 @@ def source_location(document, section, key, path):
 
 
 class Project:
-    def __init__(self, path: str | Path, workspace=None):
+    def __init__(self, path: str | Path, workspace=None, *, allowed_manifests=None):
         self.manifest_path = manifest_path(path)
+        self.allowed_manifests = allowed_manifests
         self.root = self.manifest_path.parent
         self.boundary = Path(workspace).resolve() if workspace else None
         if self.boundary and not self.manifest_path.is_relative_to(self.boundary):
@@ -92,14 +93,14 @@ class Project:
         if self.composition:
             self.scope = self.composition.scope(self.requirements)
             for unit in self.composition.units.values():
-                for public, symbol in getattr(unit.manifest, "exports", {}).items():
+                for public, symbol in unit.exports.items():
                     target = unit.qualify(symbol)
                     if target not in self.ports and target not in self.requirements:
                         raise ClosureError(f"Unknown export {unit.name}.{public}: {symbol}", "UNKNOWN_EXPORT", str(unit.path))
-                for alias, link in getattr(unit.manifest, "imports", {}).items():
+                for alias, target in unit.imports.items():
+                    link = unit.manifest.imports[alias]
                     if link.port is None:
                         continue
-                    target = unit.imports[alias]
                     port = self.ports.get(target)
                     if port is None or port.type != link.port.type or (port.type == "enum" and port.choices != link.port.choices):
                         raise ClosureError(f"{unit.name}.{alias}: {target} has incompatible type", "TYPE_MISMATCH", str(unit.path))
@@ -257,7 +258,7 @@ class Project:
             manifest = unit.manifest if unit else self.manifest
             for groups in (manifest.scenarios, manifest.configurations):
                 for context in groups.values():
-                    self.resolve_parameters({unit.qualify(k) if unit else k: v for k, v in context.overrides.items()})
+                    self.resolve_parameters(unit.overrides(context.overrides) if unit else context.overrides)
 
     def context_overrides(self, scenario, configuration):
         """Collect the selected overrides under their linked parameter IDs."""
@@ -270,7 +271,7 @@ class Project:
                 raise ClosureError(f"{unit.name} does not declare {scenario} / {configuration}",
                                    "UNKNOWN_CONTEXT", str(unit.path))
             local = {**manifest.configurations[configuration].overrides, **manifest.scenarios[scenario].overrides}
-            combined.update({unit.qualify(k): v for k, v in local.items()} if unit else local)
+            combined.update(unit.overrides(local) if unit else local)
         return combined
 
     def resolve_parameters(self, overrides=None):
@@ -289,7 +290,17 @@ class Project:
             values[identifier] = replacement
         return values
 
-    def obligation_contract(self, *, approving=False):
+    def obligation_contract(self, *, approving=False, input_files=None):
+        """Build the reviewed contract and optionally record the files used to derive it."""
+        if input_files is not None:
+            input_files.update(self.document_hashes)
+
+        def checksum(path):
+            value = file_digest(path) if path.is_file() else None
+            if input_files is not None:
+                input_files[path] = value
+            return value
+
         protected, producers = self.limit_dependencies()
         definitions = {}
         for key in sorted(producers):
@@ -298,8 +309,12 @@ class Project:
             tools = {}
             try:
                 files = source_snapshot(self, analysis, root)
+                if input_files is not None:
+                    input_files.update({root / name: value for name, value in files.items()})
                 for name, executable in limit_tools(analysis.run).items():
                     tools[name] = file_digest(executable)
+                    if input_files is not None:
+                        input_files[executable] = tools[name]
             except ClosureError as exc:
                 if approving:
                     raise
@@ -308,7 +323,7 @@ class Project:
                 path = (root / name).resolve()
                 if approving and not path.is_file():
                     raise ClosureError(f"Missing limit calculation dependency {name}", "MISSING_SOURCE", str(path))
-                files[name] = file_digest(path) if path.is_file() else None
+                files[name] = checksum(path)
             definitions[key] = {"analysis": analysis.model_dump(), "files": files}
             if tools:
                 definitions[key]["executables"] = tools
@@ -329,7 +344,7 @@ class Project:
                 path = within(self.source_root(key), name)
                 if approving and not path.is_file():
                     raise ClosureError(f"Missing limit input {key}: {name}", "MISSING_INPUT", str(path))
-                assets.setdefault(key, {})[name] = file_digest(path) if path.is_file() else None
+                assets.setdefault(key, {})[name] = checksum(path)
         if assets:
             additions["limit_artifacts"] = assets
         if self.composition:

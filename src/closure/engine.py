@@ -234,7 +234,13 @@ class Engine:
                 if checksum != self.values.get(key, {}).get("sha256"):
                     raise ClosureError(f"Input changed since loading: {key}", "SOURCE_CONFLICT")
                 files[path] = checksum
+        # A required imported claim relies on its owner's standalone baseline.
+        # Pin that contract's inputs even when they supply no execution here.
+        claim_owners = {self.project.unit_for(key).name for key in self.project.scope}
         for unit in self.project.composition.units.values():
+            if not unit.owned and unit.name in claim_owners:
+                authority = Project(unit.path, self.project.workspace)
+                authority.obligation_contract(input_files=files)
             root = unit.path.parent
             review_files = [within(root, unit.manifest.baseline)]
             for pattern in unit.manifest.reviews:
@@ -455,20 +461,23 @@ class Engine:
         baselines = {self.project.manifest.project: baseline}
         linked_reviews = {}
         if composition:
+            participating = {unit.path for unit in composition.units.values()}
             owners = {self.project.unit_for(key).name for key in self.project.requirements}
             scoped_owners = {self.project.unit_for(key).name for key in self.project.scope}
             for unit in composition.units.values():
                 if unit is composition.root or not (unit.owned or unit.name in owners):
                     continue
+                required_authority = unit.owned or unit.name in scoped_owners
                 try:
-                    local = Project(unit.path, self.project.workspace)
+                    local = Project(unit.path, self.project.workspace,
+                                    allowed_manifests=None if required_authority else participating)
                     baselines[unit.name] = self.baseline(local)
                 except (ClosureError, OSError, ValueError):
                     # A value supplier may have standalone obligations outside this assembly.
-                    if unit.owned or unit.name in scoped_owners:
+                    if required_authority:
                         raise
                     continue
-                if not unit.owned and unit.name not in scoped_owners:
+                if not required_authority:
                     continue
                 for review in self._reviews(local):
                     key = review.get("requirement", "")

@@ -23,11 +23,17 @@ The initial preview uses matching scenario and configuration names across partic
 
 The planner orders producers by their actual inputs. A child can supply design data before its own requirements close. Checking a component independently follows its imports and selects its required descendants. A shared supplier contributes only the imported evidence unless the manifest also declares ownership. Ordinary computational cycles and containment cycles produce diagnostics.
 
+A standalone component can import a constant from its parent even when a sibling is absent. Closure resolves the exported parameter and its context overrides. When the export is a calculated value, Closure follows the producing analysis's inputs and validity conditions across project boundaries. An imported requirement brings its verification criteria and trace references. A missing project on one of these paths identifies the declaring manifest, import alias and requested export.
+
+Earlier child baselines can include supplier projects and links discovered through unrelated exports. If the selected dependencies change the recorded baseline contract, approve the child's narrower contract once. Removing an unrelated sibling after that approval preserves the baseline. When an engine upgrade refreshes evidence, a requirement with a run-specific acceptance also needs a review of its new evidence.
+
 A required project closes when its selected requirements, explicit claim imports and required children satisfy their policies. Baselines cover scoped acceptance definitions. Required children retain their own baseline authority. Evidence classes and waiver permissions must satisfy the responsible projects, and any required review still applies. Each required subtree must have at least one applicable obligation. See the [worked power example](../../examples/composed-power/README.md).
 
 Each project gate counts distinct applicable requirements by qualified ID across its scope, required claims and required descendants. A shared child's requirement contributes once to each parent's count and once to their common ancestor's count. The viewer preserves every alias leading to a required child.
 
 Composed reports record each evaluated project's baseline assessment in `project_baselines`, keyed by project ID. The top-level `baseline` describes the selected assembly. A requirement explanation uses the defining project's entry, including its reviewer when available. Historical explanations read the sealed report. An earlier report's project gate can establish a baseline status. Reviewer attribution requires the captured baseline.
+
+An unscoped supplier requirement remains available for explanation when the selected data supports its criteria and trace references. Its owner baseline is available when Closure can assess it using the participating projects.
 
 For a calculated limit, the baseline includes the producing analyses, their settings, declared code and files, upstream input values, validity conditions, and the contents of input artifacts. Changing the formula can require review even when the numerical limit stays the same. Earlier baselines that omitted a calculation require one new approval. A change confined to the measured or predicted result refreshes its evidence under the existing criterion.
 

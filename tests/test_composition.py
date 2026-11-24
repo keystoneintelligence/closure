@@ -118,6 +118,61 @@ def test_required_child_and_supplier_contract(assembly):
         Project(assembly)
 
 
+@pytest.fixture
+def electronics_allocation(assembly):
+    child = assembly / "electronics"
+    edit_yaml(assembly / "project.yaml", lambda d: d.update(exports={"allocation": "budget.maximum"}))
+    edit_yaml(child / "project.yaml", lambda d: d["imports"].update(allocation={"path": "..", "export": "allocation"}))
+    edit_yaml(child / "model/load.yaml", lambda d: d["requirements"]["local_budget"]["verify"].update(limit={"ref": "@allocation"}))
+    return child
+
+
+def test_standalone_child_uses_parent_allocation_without_cooling(assembly, electronics_allocation, capsys):
+    child = electronics_allocation
+    edit_yaml(assembly / "model/budget.yaml", lambda d: d["parameters"].update(reserve={"value": 10, "unit": "W"}))
+
+    def configure_parent(manifest):
+        manifest["scenarios"] = {"nominal": {"overrides": {
+            "budget.maximum": {"value": 100, "unit": "W"}, "budget.reserve": {"value": 12, "unit": "W"}}}}
+        manifest["imports"]["fan"]["port"] = {"type": "quantity", "unit": "W"}
+
+    edit_yaml(assembly / "project.yaml", configure_parent)
+    approve_baseline(child, "Electronics engineer", "Reviewed the assembly allocation")
+    shutil.rmtree(assembly / "cooling")
+
+    assert main(["verify", "--project", str(child), "--trusted", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["gate"] and report["scope"] == ["electronics::load.local_budget"]
+    assert set(report["projects"]) == {"electronics", "system", "reference"}
+    assert report["executed"] == ["reference::profile.evaluate", "electronics::load.scale"]
+    assert "system::budget.reserve" not in report["values"]
+    comparison = next(r for r in report["requirements"] if r["id"] == "electronics::load.local_budget")["comparisons"][0]
+    assert comparison["actual"] == 52 and comparison["limit"] == 100
+
+
+def test_standalone_child_reports_missing_input_to_parent_calculation(assembly, electronics_allocation, capsys):
+    def calculated_allocation(manifest):
+        manifest["exports"]["allocation"] = "budget.sum.total"
+        manifest["imports"]["reference_load"] = {"path": "reference", "export": "load"}
+
+    edit_yaml(assembly / "project.yaml", calculated_allocation)
+    edit_yaml(assembly / "model/budget.yaml", lambda d: d["analyses"]["sum"].update(valid_when=[
+        {"actual": {"ref": "@reference_load"}, "op": "gt", "limit": {"value": 0, "unit": "W"}}]))
+    approve_baseline(electronics_allocation, "Electronics engineer", "Reviewed the calculated allocation")
+    assert main(["verify", "--project", str(electronics_allocation), "--trusted", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["gate"] and report["values"]["system::budget.sum.total"]["value"] == 104
+    assert set(report["executed"]) == {
+        "electronics::load.scale", "cooling::load.scale", "reference::profile.evaluate", "system::budget.sum"}
+    shutil.rmtree(assembly / "cooling")
+
+    assert main(["plan", "--project", str(electronics_allocation), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "MISSING_PROJECT"
+    assert all(detail in error["message"] for detail in ("fan", "demand", "cooling"))
+    assert Path(error["location"]) == assembly / "project.yaml"
+
+
 def test_value_supplier_explains_its_unscoped_requirement_without_a_gate(assembly):
     electronics = assembly / "electronics"
     key = "electronics::load.local_budget"
