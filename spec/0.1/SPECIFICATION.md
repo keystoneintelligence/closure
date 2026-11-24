@@ -113,7 +113,9 @@ Planning MUST NOT execute project programs. An engine computes execution identit
 
 Evidence is current only if the identity matches, required archived bytes pass integrity checks, reuse is permitted and upstream support is current. Missing means no usable evidence; stale means recorded evidence no longer supports the selected inputs/context. A previous successful value MUST NOT masquerade as current after its producing analysis fails.
 
-Verify runs analyses in dependency order, reuses current permitted evidence and recomputes affected downstream analyses. `--force` reruns every analysis in the selected context. A failed forced run MUST invalidate the old reusable success for that execution identity. Successful records are sealed; each completed Verify saves a new assessment snapshot, including failures. The `executed` list identifies successful reruns; analysis state/error fields and progress events also describe failed attempts.
+Plan and Verify select the same analyses for a given scenario and configuration. They start with the scoped requirements that apply to both, then follow their actual and limit bindings and all upstream analysis inputs and validity conditions. Each producer appears once in dependency order, even when several requirements use its outputs.
+
+Verify reuses current permitted evidence and recomputes affected downstream analyses. `--force` reruns every analysis on that work list. A failed forced run MUST invalidate the old reusable success for that execution identity. Successful records are sealed; each completed Verify saves a new assessment snapshot, including failures. The `executed` list identifies successful reruns; analysis state/error fields and progress events also describe failed attempts.
 
 ## 8. Requirement assessment and gates
 
@@ -131,7 +133,7 @@ Every assessment MUST preserve separate dimensions:
 
 `all_of` requires all branches. `any_of` uses a current passing branch, preferring one whose evidence classes are permitted by policy; an unused failing alternative does not veto valid support. Branch results remain visible. Authored design/assumption data count as assumed evidence; predicted/measured/established origins retain that class. Manual acceptance MUST NOT override rejected evidence classes.
 
-A requirement is closed only when applicable, current, execution complete, verdict pass, acceptance accepted and the obligation baseline current. Review-required policies/requirements need a matching acceptance record. A policy-authorized waiver can allow the gate while leaving the requirement visibly unverified. A non-applicable scoped requirement requires an explicit matching not_applicable review to be excluded. The gate is true only for nonempty valid scope/contexts, a current baseline and every scoped requirement permitting the gate.
+A requirement is closed only when applicable, current, execution complete, verdict pass, acceptance accepted and the obligation baseline current. Review-required policies/requirements need a matching acceptance record. A policy-authorized waiver can allow the gate while leaving the requirement visibly unverified. A non-applicable scoped requirement requires an explicit matching not_applicable review to be excluded. The review binds the requirement identity, its declared scenario and configuration sets, and the selected context. Refreshing shared evidence preserves this review. The gate is true only for nonempty valid scope/contexts, a current baseline and every scoped requirement permitting the gate.
 
 Studies use either a nonempty parameter grid or explicit points, exclusively, across declared scenario/configuration selections. Every requested outcome MUST remain in the aggregate, including failed or missing evidence. A sampled study makes no claim about unsampled behavior.
 

@@ -59,7 +59,7 @@ def assessment_lines(item):
         lines.append("  Evidence outside the acceptance policy: " + ", ".join(item["evidence_classes"]))
     operators = {"gte": ">=", "lte": "<=", "gt": ">", "lt": "<", "eq": "=", "ne": "!="}
     alternative = item.get("verification_mode") == "any_of"
-    if alternative:
+    if alternative and item["branches"]:
         lines.append("  Any one alternative may provide support:")
         for branch in item["branches"]:
             selected = " (selected)" if branch["index"] in item["selected_branches"] else ""

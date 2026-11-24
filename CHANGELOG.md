@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Plan and Verify schedule only the producers needed by scoped requirements in the selected scenario and configuration. Forced verification uses the same selection.
+- An N/A review tracks the requirement's applicability declarations and context. Refreshing a shared producer preserves the review. Closure reuses an older N/A review when its hash matches the assessment before any of the requirement's producers ran. A review bound to a specific run needs a new applicability decision.
+
 ## 0.2.0a1 local composition preview
 
 - Link owned children and shared public values, artifacts and verified requirements across local projects.

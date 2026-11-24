@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from closure.editing import project_lock
 from closure.engine import Engine, approve_baseline, record_review
-from closure.io import ClosureError, file_digest
+from closure.io import ClosureError, digest, file_digest
 from closure.project import Project
 from conftest import edit_yaml, runner
 from test_rfc_acceptance import artifact_analysis, assessment, input_power
@@ -77,6 +77,71 @@ def test_manual_review_cannot_override_evidence_class_policy(project_dir):
     assert not result["gate"] and assessment(result)["acceptance"] == "rejected"
     with pytest.raises(ClosureError, match="evidence classes"):
         record_review(Engine(project_dir), "power.PWR-001", "accepted", "reviewer", "Would bypass evidence policy")
+
+
+def test_na_review_tracks_applicability_declarations_and_context(project_dir):
+    manifest = project_dir / "project.yaml"
+    model = project_dir / "model/power.yaml"
+    edit_yaml(manifest, lambda d: d.update(scenarios={"nominal": {}, "high_load": {}},
+                                           configurations={"default": {}, "spare": {}}))
+    approve_baseline(project_dir, "reviewer", "Review the available contexts")
+    review = record_review(Engine(project_dir, scenario="high_load"), "power.PWR-001", "not_applicable",
+                           "reviewer", "The nominal power limit covers the nominal load profile")
+    assert assessment(Engine(project_dir, scenario="high_load", configuration="spare").plan())["review"] is None
+    assert assessment(Engine(project_dir, scenario="nominal").plan())["review"] is None
+
+    # A new verification limit needs a baseline review, but changes no applicability facts.
+    edit_yaml(model, lambda d: d["requirements"]["PWR-001"]["verify"]["limit"].update(value=190))
+    assert not Engine(project_dir, scenario="high_load").plan()["gate"]
+    approve_baseline(project_dir, "reviewer", "Review the revised nominal power limit")
+    assert assessment(Engine(project_dir, scenario="high_load").plan())["review"] == review
+
+    # Still outside the nominal scenario, but the reviewed configuration declaration changed.
+    edit_yaml(model, lambda d: d["requirements"]["PWR-001"].update(configurations=["default", "spare"]))
+    approve_baseline(project_dir, "reviewer", "Review the expanded configuration list")
+    changed = assessment(Engine(project_dir, scenario="high_load").plan())
+    assert changed["status"] == "REVIEW" and changed["review"] is None
+    assert changed["assessment_hash"] != review["assessment_hash"]
+
+
+@pytest.mark.parametrize("reviewed_before_run", [True, False])
+def test_legacy_na_review_only_reuses_reproducible_applicability(project_dir, reviewed_before_run):
+    edit_yaml(project_dir / "project.yaml", lambda d: d.update(scenarios={"nominal": {}, "high_load": {}}))
+    def add_high_load_requirement(d):
+        d["requirements"]["PWR-002"] = {
+            "text": "Power demand under high load shall remain within the allocation.", "applies_to": ["high_load"],
+            "verify": {"any_of": [{"actual": {"ref": ref}, "op": "lte", "limit": {"value": 200, "unit": "W"}}
+                                  for ref in ("power.budget.total", "power.base_load")]}}
+    edit_yaml(project_dir / "model/power.yaml", add_high_load_requirement)
+    approve_baseline(project_dir, "reviewer", "Review the high-load power allocation")
+    engine = Engine(project_dir)
+    key = "power.PWR-002"
+    policy = engine.project.manifest.policy.model_dump()
+    policy["accepted_evidence"] = sorted(policy["accepted_evidence"])
+    run_hash = None
+    if not reviewed_before_run:
+        run_hash = engine.verify(trusted=True)["analyses"][0]["record"]["record_hash"]
+    legacy_hash = digest({"requirement": engine.project.requirements[key].model_dump(),
+                          "context": engine.context, "policy": policy,
+                          "records": {"power.budget": run_hash},
+                          "inputs": {"power.base_load": engine.parameters["power.base_load"].model_dump()},
+                          "selected_branches": [1 if reviewed_before_run else 0]})
+    review = {"schema": "closure-review/0.1", "requirement": key, "context": engine.context,
+              "decision": "not_applicable", "assessment_hash": legacy_hash, "reviewer": "Power reviewer",
+              "reason": "The high-load allocation applies only to the high-load scenario", "at": "2025-01-01T00:00:00Z"}
+    folder = project_dir / "reviews/acceptance"
+    folder.mkdir(exist_ok=True)
+    (folder / "high_load.json").write_text(json.dumps(review), encoding="utf-8")
+
+    plan = engine.plan()
+    result = engine.verify(trusted=True, force=True)
+    assert result["executed"] == ["power.budget"]
+    for report in (plan, result):
+        allocation = next(row for row in report["requirements"] if row["id"] == key)
+        assert allocation["status"] == ("NOT_APPLICABLE" if reviewed_before_run else "REVIEW")
+        assert allocation["review"] == (review if reviewed_before_run else None)
+        assert allocation["evidence"] == [] and allocation["comparisons"] == []
+    assert result["gate"] is reviewed_before_run
 
 
 def test_malformed_duplicate_json_outputs_fail(project_dir):
