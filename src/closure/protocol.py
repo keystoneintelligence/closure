@@ -333,6 +333,7 @@ class AssessmentComparison(RuntimeContract):
 
 class ComposedReport(Report):
     schema_version: Literal["closure-report/0.2"] = Field(alias="schema")
+    project_baselines: dict[str, BaselineAssessment] = Field(default_factory=dict)
     baseline_changes: list[str] = Field(default_factory=list)
     revision: Revision | None = None
     comparison: AssessmentComparison | None = None

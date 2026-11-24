@@ -16,6 +16,7 @@ from .io import ClosureError, atomic_json, digest, file_digest, load_source, rea
 from .models import Binding, Criterion, Datum, Study
 from .protocol import validate_report, StudyResult
 from .project import Project, criteria, refs
+from .reporting import explain_report
 from .units import convert
 from .editing import project_lock
 
@@ -421,12 +422,13 @@ class Engine:
                     decisions[authority] = entry
         # One authority may revise its own review. Another authority cannot lift its rejection.
         review = max(decisions.values(), key=lambda r: (r["decision"] == "rejected", r["at"]), default=None)
+        baseline_current = baseline is not None and baseline["status"] == "current"
         acceptance = "accepted"
         if not classes.issubset(set(policy.accepted_evidence)):
             acceptance = "rejected"
-        elif baseline["status"] != "current" or requirement.review_required or policy.require_review:
+        elif not baseline_current or requirement.review_required or policy.require_review:
             acceptance = "review_required"
-        if review and acceptance != "rejected" and baseline["status"] == "current":
+        if review and acceptance != "rejected" and baseline_current:
             acceptance = review.get("decision", "review_required")
             if acceptance == "waived" and not policy.allow_waivers:
                 acceptance = "rejected"
@@ -434,9 +436,9 @@ class Engine:
             verdict, freshness, execution, acceptance = "unknown", "missing", "not_run", "review_required"
             if review and review.get("decision") == "not_applicable":
                 acceptance = "accepted"
-        closed = applicable and freshness == "current" and execution == "complete" and verdict == "pass" and acceptance == "accepted" and baseline["status"] == "current"
-        waiver_allowed = applicable and acceptance == "waived" and policy.allow_waivers and baseline["status"] == "current"
-        gate_allowed = closed or waiver_allowed or (not applicable and acceptance == "accepted" and baseline["status"] == "current")
+        closed = applicable and freshness == "current" and execution == "complete" and verdict == "pass" and acceptance == "accepted" and baseline_current
+        waiver_allowed = applicable and acceptance == "waived" and policy.allow_waivers and baseline_current
+        gate_allowed = closed or waiver_allowed or (not applicable and acceptance == "accepted" and baseline_current)
         status = "PASS" if closed else "WAIVED" if acceptance == "waived" else "NOT_APPLICABLE" if not applicable and acceptance == "accepted" else "REVIEW" if not applicable else "ERROR" if execution == "error" else "BLOCKED" if execution == "blocked" else freshness.upper() if freshness != "current" else "FAIL" if verdict == "fail" else "REVIEW" if acceptance == "review_required" else "REJECTED" if acceptance == "rejected" else "UNKNOWN"
         return {"id": identifier, "text": requirement.text, "owner": self.project.modules[identifier.split('.')[0]].owner,
                 "method": requirement.method, "applicability": "applicable" if applicable else "not_applicable",
@@ -453,12 +455,21 @@ class Engine:
         baselines = {self.project.manifest.project: baseline}
         linked_reviews = {}
         if composition:
+            owners = {self.project.unit_for(key).name for key in self.project.requirements}
+            scoped_owners = {self.project.unit_for(key).name for key in self.project.scope}
             for unit in composition.units.values():
-                supplies_claim = any(key.startswith(unit.name + "::") for key in self.project.scope)
-                if unit is composition.root or not (unit.owned or supplies_claim):
+                if unit is composition.root or not (unit.owned or unit.name in owners):
                     continue
-                local = Project(unit.path, self.project.workspace)
-                baselines[unit.name] = self.baseline(local)
+                try:
+                    local = Project(unit.path, self.project.workspace)
+                    baselines[unit.name] = self.baseline(local)
+                except (ClosureError, OSError, ValueError):
+                    # A value supplier may have standalone obligations outside this assembly.
+                    if unit.owned or unit.name in scoped_owners:
+                        raise
+                    continue
+                if not unit.owned and unit.name not in scoped_owners:
+                    continue
                 for review in self._reviews(local):
                     key = review.get("requirement", "")
                     if key in local.requirements and (key in local.scope or local.source_root(key) == local.root):
@@ -468,7 +479,7 @@ class Engine:
         assessments = []
         for key in self.project.requirements:
             owner = self.project.unit_for(key).name if composition else self.project.manifest.project
-            assessments.append(self.assess(key, baselines.get(owner, baseline), reviews, linked_reviews.get(key, ())))
+            assessments.append(self.assess(key, baselines.get(owner), reviews, linked_reviews.get(key, ())))
         scoped = [a for a in assessments if a["scoped"]]
         gate = bool(scoped) and bool(self.project.manifest.scenarios) and bool(self.project.manifest.configurations) and baseline["status"] == "current" and all(a["gate_allowed"] for a in scoped)
         analyses = [{"id": identifier, "state": self.states.get(identifier, "missing"), "execution_key": self.keys.get(identifier),
@@ -489,7 +500,7 @@ class Engine:
                 approved = read_json(within(self.project.root, self.project.manifest.baseline))
                 report["baseline_changes"] = contract_changes(approved.get("contract", {}), self.project.obligation_contract())
             gates = composition.gates(assessments, baselines, self.project.requirements)
-            report.update(schema="closure-report/0.2", projects=composition.describe(), gates=gates,
+            report.update(schema="closure-report/0.2", projects=composition.describe(), gates=gates, project_baselines=baselines,
                           gate=gates[composition.root.name]["gate"])
         validate_report(report)
         return report
@@ -497,20 +508,8 @@ class Engine:
     def explain(self, identifier):
         if identifier not in self.project.requirements:
             raise ClosureError(f"Unknown requirement {identifier}", "UNKNOWN_REF")
-        if not self.states:
-            self.plan()
-        assessment = next(row for row in self.report()["requirements"] if row["id"] == identifier)
-        paths = []
-        def trace(node, suffix, visited):
-            if node in visited:
-                return
-            parents = [e["source"] for e in self.project.edges if e["target"] == node and e["kind"] in ("consumes", "produces", "verifies")]
-            if not parents:
-                paths.append([node, *suffix])
-            for parent in parents:
-                trace(parent, [node, *suffix], visited | {node})
-        trace(identifier, [], set())
-        return {"requirement": assessment, "paths": paths, "context": self.context, "baseline": self.baseline()}
+        report = self.report() if self.states else self.plan()
+        return explain_report(report, identifier)
 
 
 def approve_baseline(project, reviewer, reason):

@@ -12,7 +12,7 @@ COMMANDS = {
     "plan": ("Show reusable evidence and analyses needing execution; run nothing.", "closure plan\nclosure plan --scenario surge\nclosure plan --base HEAD"),
     "verify": ("Run affected analyses, propagate results, and evaluate requirements.", "closure verify --trusted\nclosure verify --trusted --force\nclosure verify --scenario surge --trusted --json"),
     "set": ("Change one base input, preserving its type, metadata, and units.", 'closure set workload.arrival_rate 250\nclosure set workload.arrival_rate 250 --unit "1/s"\nclosure set workload.arrival_rate 160 --reason "Measured sustained traffic"'),
-    "explain": ("Explain one requirement's verdict, evidence, and dependency paths.", "closure explain operations.CAP-001\nclosure explain operations.CAP-001 --scenario surge"),
+    "explain": ("Explain one requirement's verdict, evidence, baseline, and dependency paths.", "closure explain operations.CAP-001\nclosure explain operations.CAP-001 --scenario surge\nclosure explain operations.CAP-001 --report REPORT_ID"),
     "inspect": ("Read a parameter, output, analysis, requirement, or module contract.", "closure inspect workload.arrival_rate\nclosure inspect platform.capacity --json"),
     "impact": ("List downstream elements that can be affected by an input or output.", "closure impact workload.arrival_rate"),
     "format": ("Format YAML/JSON concisely without changing the compiled model.", "closure format\nclosure format --check"),
@@ -129,6 +129,8 @@ def make_parser():
         if name == "export":
             command.add_argument("--output", required=True, help="New destination folder for the portable report")
             command.add_argument("--report", help="Export a saved snapshot by ID instead of the current project")
+        if name == "explain":
+            command.add_argument("--report", help="Explain the requirement in the saved report's context")
         if name == "history":
             command.add_argument("--compare", metavar="EARLIER_REPORT", help="Compare --report with a saved assessment in the same context")
             selection = command.add_mutually_exclusive_group()

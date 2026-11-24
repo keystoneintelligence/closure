@@ -8,15 +8,31 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from .engine import Engine
 from .evidence import EvidenceStore
 from .io import ClosureError, atomic_json, file_digest
 
 
-def explain_saved_report(report, identifier):
+def _owner_baseline(report, owner):
+    if owner == report["project"]:
+        return report["baseline"]
+    if "project_baselines" in report:
+        return report["project_baselines"].get(owner)
+    # Earlier composed snapshots retained gate outcomes but no child review records.
+    gate = report.get("gates", {}).get(owner)
+    if gate:
+        for status in ("missing", "changed"):
+            reason = f"Obligation baseline {status}"
+            if reason in gate["reasons"]:
+                return {"status": status, "message": reason + "."}
+        if gate["gate"]:
+            return {"status": "current", "message": "The saved project gate passed with a current baseline."}
+    return None
+
+
+def explain_report(report, identifier):
     requirement = next((r for r in report["requirements"] if r["id"] == identifier), None)
     if requirement is None:
-        raise ClosureError(f"Unknown requirement in this snapshot: {identifier}", "UNKNOWN_REF")
+        raise ClosureError(f"Unknown requirement in this assessment: {identifier}", "UNKNOWN_REF")
     paths = []
     def trace(node, suffix, visited):
         if node in visited:
@@ -28,11 +44,18 @@ def explain_saved_report(report, identifier):
         for parent in parents:
             trace(parent, [node, *suffix], visited | {node})
     trace(identifier, [], set())
+    owner = identifier.split("::", 1)[0] if report["schema"] == "closure-report/0.2" else report["project"]
     return {"requirement": requirement, "paths": paths, "context": report["context"],
-            "baseline": report["baseline"], "snapshot": report["id"]}
+            "baseline_project": owner, "baseline": _owner_baseline(report, owner)}
+
+
+def explain_saved_report(report, identifier):
+    return {**explain_report(report, identifier), "snapshot": report["id"]}
 
 
 def export_report(engine, destination, report_id=None):
+    from .engine import Engine
+
     if report_id:
         root = engine.project.root if isinstance(engine, Engine) else Path(engine).resolve()
         store = EvidenceStore(root if root.is_dir() else root.parent)

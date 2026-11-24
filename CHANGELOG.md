@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Requirement explanations in the CLI and viewer show the owning project's baseline status and reviewer. `explain REQUIREMENT --report ID` reads those details from the saved assessment.
 - `plan --base` traces effective scenario and configuration override changes in each participating project to the analyses and requirements that consume those inputs.
 - Plan and Verify schedule only the producers needed by scoped requirements in the selected scenario and configuration. Forced verification uses the same selection.
 - An N/A review tracks the requirement's applicability declarations and context. Refreshing a shared producer preserves the review. Closure reuses an older N/A review when its hash matches the assessment before any of the requirement's producers ran. A review bound to a specific run needs a new applicability decision.

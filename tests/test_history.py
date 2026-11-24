@@ -1,11 +1,12 @@
 """Historical support must survive edits without being mistaken for current support."""
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 
 from closure.cli import main
-from closure.engine import Engine
+from closure.engine import Engine, approve_baseline
 from closure.evidence import EvidenceStore
 from closure.io import ClosureError, atomic_json, file_digest
 from closure.reporting import explain_saved_report, export_report
@@ -27,8 +28,11 @@ def test_historical_model_and_assessment_survive_source_edits(project_dir, tmp_p
     module = next(m for m in saved["model"]["modules"] if m["module"] == "payload")
     assert module["parameters"]["peak_power"]["value"] == 80
     explanation = explain_saved_report(saved, "power.PWR-001")
+    assert explanation["baseline_project"] == saved["project"]
+    assert explanation["baseline"] == saved["baseline"]
     assert explanation["requirement"]["comparisons"][0]["actual"] == 180
     assert ["payload.peak_power", "power.budget", "power.budget.total", "power.PWR-001"] in explanation["paths"]
+    assert main(["explain", "power.PWR-001", "--project", str(project_dir), "--report", built["id"]]) == 0
     result = export_report(project_dir, tmp_path / "snapshot", built["id"])
     assert result["mode"] == "historical" and result["artifacts"] == 1
     page = (tmp_path / "snapshot/index.html").read_text(encoding="utf-8")
@@ -101,6 +105,44 @@ def test_legacy_reports_and_invalid_history_ids_are_explicit(project_dir):
         with pytest.raises(ClosureError) as exc:
             store.load_report(identifier)
         assert exc.value.code == "HISTORY_ID"
+
+
+def test_legacy_composed_explanations_use_only_archived_owner_details(tmp_path):
+    assembly = tmp_path / "assembly"
+    shutil.copytree(Path(__file__).parents[1] / "examples/composed-power", assembly,
+                    ignore=shutil.ignore_patterns(".closure", "__pycache__"))
+    (assembly / "electronics/reviews/baseline.json").unlink()
+    edit_yaml(assembly / "cooling/model/load.yaml",
+              lambda d: d["requirements"]["local_budget"]["verify"]["limit"].update(value=65))
+    edit_yaml(assembly / "reference/model/load.yaml", lambda d: d.update(requirements={
+        "allocation": {"text": "The reference load is within its allocation.",
+                       "verify": {"actual": {"ref": "profile.reference"}, "op": "lte",
+                                  "limit": {"value": 30, "unit": "W"}}}}))
+    approve_baseline(assembly, "Assembly reviewer", "Reviewed the revised system allocation")
+
+    previous = Engine(assembly).plan()
+    previous.pop("project_baselines", None)
+    archive = EvidenceStore(tmp_path / "archive")
+    archive.save_report(previous)
+    saved = archive.load_report(previous["id"])
+    assert "project_baselines" not in saved
+    root = explain_saved_report(saved, "system::budget.power")
+    assert root["baseline_project"] == "system"
+    assert root["baseline"] == saved["baseline"]
+    assert root["baseline"]["reviewer"] == "Assembly reviewer"
+
+    for owner, status in (("electronics", "missing"), ("cooling", "changed")):
+        assert f"Obligation baseline {status}" in saved["gates"][owner]["reasons"]
+        explained = explain_saved_report(saved, f"{owner}::load.local_budget")
+        assert explained["baseline_project"] == owner
+        assert explained["baseline"]["status"] == status
+        for field in ("current_hash", "approved_hash", "reviewer"):
+            assert explained["baseline"].get(field) is None
+
+    assert "reference" not in saved["gates"]
+    supplier = explain_saved_report(saved, "reference::profile.allocation")
+    assert supplier["baseline_project"] == "reference"
+    assert supplier["baseline"] is None
 
 
 def test_consumed_input_artifacts_are_retained_and_checked(project_dir, tmp_path):
