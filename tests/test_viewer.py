@@ -2,6 +2,7 @@
 import json
 import shutil
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -10,8 +11,8 @@ import pytest
 
 from closure.cli import main
 from closure.engine import Engine, approve_baseline
-from closure.io import file_digest
-from closure.viewer_server import create_server
+from closure.io import ClosureError, file_digest
+from closure.viewer_server import Viewer, create_server
 from closure.viewer_server import VIEWER_API
 from closure import __version__
 from conftest import edit_yaml
@@ -19,9 +20,9 @@ from test_composition import assembly
 from test_rfc_acceptance import artifact_analysis, input_power
 
 
-@pytest.fixture
-def viewer(project_dir):
-    server = create_server(project_dir, port=0, workspace=project_dir.parent, trusted=True)
+@contextmanager
+def running_viewer(project, workspace):
+    server = create_server(project, port=0, workspace=workspace, trusted=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     def request(path, body=None, headers=None):
@@ -38,10 +39,18 @@ def viewer(project_dir):
             if response.headers.get_content_type() == "application/json":
                 content = json.loads(content)
             return response.status, content, response.headers
-    yield server, request
-    server.shutdown()
-    server.server_close()
-    thread.join(5)
+    try:
+        yield server, request
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
+
+
+@pytest.fixture
+def viewer(project_dir):
+    with running_viewer(project_dir, project_dir.parent) as active_viewer:
+        yield active_viewer
 
 
 def test_viewer_edits_stales_builds_and_explains(viewer, project_dir):
@@ -148,6 +157,52 @@ def test_viewer_history_preserves_model_values_and_explanations(viewer, project_
     assert history["reports"][0]["id"] == built["id"]
     _, record, _ = request("/api/runs?id=" + history["runs"][0]["id"])
     assert record["run"]["outputs"]["total"]["value"] == 180
+
+
+@pytest.mark.parametrize("fixture_name,broken_source", [
+    ("project_dir", "project.yaml"),
+    ("assembly", "electronics/model/load.yaml"),
+])
+def test_cold_viewer_opens_saved_evidence_with_invalid_source(fixture_name, broken_source, request, monkeypatch):
+    root = request.getfixturevalue(fixture_name)
+    if fixture_name == "project_dir":
+        artifact_analysis(root)
+    report = Engine(root).verify(trusted=True)
+    (root / broken_source).write_text("invalid: [", encoding="utf-8")
+
+    selected = root / "project.yaml" if fixture_name == "project_dir" else root
+    with running_viewer(selected, root) as (_, api):
+        status, error, _ = api("/api/project")
+        assert status == 400 and error["error"]["code"] == "SOURCE_PARSE"
+        # A historical read must not attempt project discovery, even if it could recover.
+        def forbid_project(*args, **kwargs):
+            pytest.fail("Historical read tried to compile current source")
+        monkeypatch.setattr("closure.viewer_server.Project", forbid_project)
+        query = "report=" + report["id"]
+        status, snapshot, _ = api("/api/project?" + query)
+        assert status == 200 and snapshot["mode"] == "historical" and snapshot["report"] == report
+        assert snapshot["projects"] == [{"path": ".", "id": report["project"], "name": report["name"]}]
+        assert api("/api/history")[1]["reports"][0]["id"] == report["id"]
+        module = report["model"]["modules"][0]
+        assert json.loads(api(f"/api/source?module={module['module']}&{query}")[1]["text"]) == module
+        requirement = report["requirements"][0]["id"]
+        assert api(f"/api/explain?id={requirement}&{query}")[1]["snapshot"] == report["id"]
+        record = report["analyses"][0]["record"]
+        assert api("/api/runs?id=" + record["id"])[1]["run"] == record
+        assert api("/api/compare?base=" + report["id"] + "&" + query)[0] == 200
+        assert api("/api/verify", {"project": ".", "report": report["id"]})[1]["error"]["code"] == "HISTORY_READ_ONLY"
+        if fixture_name == "project_dir":
+            artifact = report["values"]["power.budget.shape"]
+            assert api("/api/artifacts/" + artifact["sha256"])[1] == b"engineering artifact"
+
+
+def test_viewer_rejects_missing_or_outside_project_paths(project_dir):
+    with pytest.raises(ClosureError) as missing:
+        Viewer(project_dir / "missing", project_dir)
+    assert missing.value.code == "PROJECT_NOT_FOUND"
+    with pytest.raises(ClosureError) as outside:
+        Viewer(project_dir.parent, project_dir)
+    assert outside.value.code == "PATH_ESCAPE"
 
 
 def test_child_baseline_in_live_and_saved_explanations(viewer, assembly, capsys):

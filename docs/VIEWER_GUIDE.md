@@ -20,6 +20,8 @@ After a build, the viewer opens a **Historical build snapshot** with the saved m
 
 This distinction matters for external applications whose complete runtimes are not captured: the Blender/OpenFOAM example reruns them on each build and shows later plans as stale. Its completed build still remains inspectable and downloadable. Nonzero quantities below 0.0001 use scientific notation so small residuals do not appear to be zero.
 
+If an edit leaves the current YAML unreadable, the viewer shows the source error alongside **Saved builds and runs**. Choose **Open snapshot** to inspect the sealed assessment or **Inspect run** to read a recorded execution. Reloading a snapshot keeps its report ID. After repairing the source, choose **Retry current project** to load the live assessment.
+
 The project selector loads another valid project under `--workspace`. Scenario and configuration selectors use that project's declared contexts, including names other than `nominal` and `default`. A project without geometry still supports team, requirement, variable, and evidence views.
 
 ## Portable reports

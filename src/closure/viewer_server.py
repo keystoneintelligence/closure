@@ -11,6 +11,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
+from .composition import manifest_path
 from .editing import patch_parameters
 from .engine import Engine
 from .evidence import EvidenceStore
@@ -35,14 +36,16 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
 class Viewer:
     def __init__(self, project, workspace=None, trusted=False):
-        selected = Project(project, workspace)
-        self.project = selected.root
-        self.manifest_path = selected.manifest_path
+        self.manifest_path = manifest_path(project)
+        self.project = self.manifest_path.parent
         self.workspace = Path(workspace).resolve() if workspace else self.project.parent
         if not self.project.is_relative_to(self.workspace):
             raise ClosureError("Viewer project must be inside its workspace", "PATH_ESCAPE")
+        if not Path(project).exists():
+            raise ClosureError("Viewer project does not exist", "PROJECT_NOT_FOUND", str(project))
         self.trusted = trusted
         self.linked_artifacts = {}
+        self.known_projects = []
         self.token = secrets.token_urlsafe(32)
 
     def projects(self):
@@ -67,13 +70,21 @@ class Viewer:
                       configuration or next(iter(project.manifest.configurations), "default"))
 
     def snapshot(self, scenario=None, configuration=None, report_id=None):
-        report = EvidenceStore(self.project).load_report(report_id) if report_id else self.engine(scenario, configuration).plan()
-        if not report_id:
+        path = str(self.project.relative_to(self.workspace))
+        if report_id is not None:
+            report = EvidenceStore(self.project).load_report(report_id)
+            # A saved report may be the only readable model at this path.
+            selected = {"path": path, "name": report["name"], "id": report["project"]}
+            projects = [selected]
+            projects.extend(project for project in self.known_projects if project["path"] != path)
+        else:
+            report = self.engine(scenario, configuration).plan()
             for value in report["values"].values():
                 if value.get("type") == "artifact":
                     self.linked_artifacts[value["sha256"]] = Path(value["path"])
-        return {**report["model"], "path":str(self.project.relative_to(self.workspace)), "report":report,
-                "mode":"historical" if report_id else "current", "token":self.token,"trusted":self.trusted,"projects":self.projects()}
+            projects = self.known_projects = self.projects()
+        return {**report["model"], "path":path, "report":report,
+                "mode":"historical" if report_id is not None else "current", "token":self.token,"trusted":self.trusted,"projects":projects}
 
 
 def create_server(project, port=8765, workspace=None, trusted=False):

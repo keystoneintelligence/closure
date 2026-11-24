@@ -7,9 +7,12 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const localPython=fileURLToPath(new URL(process.platform==='win32'?'../../.venv/Scripts/python.exe':'../../.venv/bin/python',import.meta.url));
 const test=base.extend({
-  serviceURL:async ({}, use)=>{
+  invalidCurrent: [false, {option: true}],
+  serviceURL:async ({invalidCurrent}, use)=>{
     const python=process.env.CLOSURE_TEST_PYTHON||(existsSync(localPython)?localPython:'python');
-    const child=spawn(python,['tools/viewer_test_server.py'],{cwd:root,stdio:['ignore','pipe','pipe'],windowsHide:true});
+    const args = ['tools/viewer_test_server.py'];
+    if (invalidCurrent) args.push('--invalid-current');
+    const child=spawn(python,args,{cwd:root,stdio:['ignore','pipe','pipe'],windowsHide:true});
     let errors='';child.stderr.on('data',data=>errors+=data);
     const lines=createInterface({input:child.stdout});
     try {
@@ -25,6 +28,34 @@ const test=base.extend({
       if(child.exitCode===null){child.kill();await new Promise(resolve=>child.once('exit',resolve));}
     }
   },
+});
+
+test.describe('saved evidence with invalid current source', () => {
+  test.use({invalidCurrent: true});
+
+  test('opens a sealed report and its records after a broken edit', async ({page, serviceURL}) => {
+    await page.goto(serviceURL);
+    await expect(page.getByRole('heading', {name: 'Current project unavailable'})).toBeVisible();
+    const snapshot = page.getByRole('button', {name: 'Open snapshot'});
+    await expect(snapshot).toBeVisible();
+    const reportId = await snapshot.getAttribute('data-snapshot');
+    await page.getByRole('button', {name: 'Inspect run'}).first().click();
+    await expect(page.getByRole('dialog')).toContainText('Recorded outputs');
+    await page.keyboard.press('Escape');
+    await snapshot.click();
+    await expect(page.getByText('Recorded scope closed')).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('report')).toBe(reportId);
+    await page.reload();
+    await expect(page.getByRole('button', {name: 'Verify', exact: true})).toBeDisabled();
+    await page.getByRole('button', {name: 'Requirements'}).first().click();
+    await page.locator('[data-explain="operations.CAP-001"]').first().click();
+    await expect(page.getByRole('dialog')).toContainText('workload.arrival_rate');
+    await expect(page.getByRole('region', {name: 'Obligation baseline'})).toContainText('Browser fixture');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', {name: 'Return to current project'}).click();
+    await expect(page.getByRole('heading', {name: 'Current project unavailable'})).toBeVisible();
+    await expect(snapshot).toBeVisible();
+  });
 });
 
 test('edit → selective Verify → explanation → immutable history, using keyboard dialogs',async({page,serviceURL})=>{

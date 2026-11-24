@@ -169,6 +169,12 @@ codes. `--quiet --json` still emits JSON. Avoid parsing human output in scripts.
 Use `verify` to gate CI. A solver failure recorded in a verification report is an
 open gate (1); an invocation rejected before execution is an input/setup error (2).
 
+Both exit 0 and exit 1 produce a sealed report. The repository's CI passes the
+ID from that invocation to `closure export --report ID --output dist/composed-report`.
+The verifier's exit code determines the gate result. Download the run's
+`preview-review` artifact and open the composition report's `index.html` to see the
+requirement, its comparison and the reason the gate stayed open.
+
 ## Tab completion
 
 Load completion for the current shell session after activating the environment:
