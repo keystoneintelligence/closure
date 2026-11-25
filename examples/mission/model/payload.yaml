@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: payload
 name: Payload operation
 owner: Payload engineering

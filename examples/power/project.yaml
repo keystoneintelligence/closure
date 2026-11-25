@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: power-demo
 name: Power budget demonstrator
 description: Two independent teams share a payload power allocation and verify the system budget.

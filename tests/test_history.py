@@ -176,7 +176,7 @@ def test_runner_cannot_change_its_copied_input_and_publish(project_dir):
         d["exports"].append("design")))
     edit_yaml(project_dir / "model/power.yaml", lambda d: d["analyses"]["budget"]["inputs"].update(design={"ref": "payload.design"}))
     runner(project_dir, "pathlib.Path(r['inputs']['design']['path']).write_text('changed')\n"
-           "json.dump({'protocol':'closure-run/0.1','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
+           "json.dump({'protocol':'closure-run/0.2','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
     report = Engine(project_dir).build(trusted=True)
     assert not report["gate"]
     assert report["analyses"][0]["error"]["code"] == "INPUT_MUTATION"

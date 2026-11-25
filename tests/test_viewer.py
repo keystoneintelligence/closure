@@ -288,6 +288,8 @@ def test_viewer_version_negotiation_prevents_incompatible_writes(viewer):
     status, metadata, headers = request('/api/version')
     assert status == 200 and metadata['api'] == VIEWER_API
     assert metadata['implementation'] == __version__
+    assert metadata['supported_sources'] == [metadata['source']] == ['closure/0.2']
+    assert metadata['runner'] == 'closure-run/0.2'
     assert headers['X-Closure-API'] == VIEWER_API
     bad = {'X-Closure-API': 'closure-viewer/999'}
     assert request('/api/project', headers=bad)[0] == 409

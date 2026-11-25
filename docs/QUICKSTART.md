@@ -1,12 +1,12 @@
 # First verification
 
-From this checkout install the preview with `python -m pip install .`. Follow the [assembly example](../examples/composed-power/README.md) to verify and inspect four connected projects.
+This guide uses the `0.2.0a1` candidate source. Follow the [assembly example](../examples/composed-power/README.md) to verify and inspect four connected projects.
 
-The preview has three parts: the [specification](../spec/0.1/SPECIFICATION.md), the Python reference CLI/backend, and its optional local viewer. You can write a runner in any language. Node is only needed to rebuild the viewer or run the JavaScript example; installing the wheel includes built viewer assets.
+The preview has three parts: the [specification](../spec/0.2/SPECIFICATION.md), the Python reference CLI/backend, and its optional local viewer. You can write a runner in any language. Node is only needed to rebuild the viewer or run the JavaScript example; installing the wheel includes built viewer assets.
 
-## Install the earlier published 0.1 preview
+## Install the 0.2 candidate
 
-Use Python 3.10 or 3.12 on Windows or Linux. Download `closure_se-0.1.0a1-py3-none-any.whl` from the [v0.1.0a1 release assets](https://github.com/keystoneintelligence/closure/releases/tag/v0.1.0a1). The release also includes source archives, SHA-256 checksums, and a release record identifying the tested commit. From its directory:
+Unpack the candidate source and open its directory. Use Python 3.10 or 3.12 on Windows or Linux. The earlier standalone wheel and its checksums remain available from the [0.1.0a1 release](https://github.com/keystoneintelligence/closure/releases/tag/v0.1.0a1).
 
 ```sh
 python -m venv .venv
@@ -15,7 +15,7 @@ python -m venv .venv
 Activate with `.venv\Scripts\Activate.ps1` in PowerShell or `source .venv/bin/activate` in Bash, then:
 
 ```sh
-python -m pip install ./closure_se-0.1.0a1-py3-none-any.whl
+python -m pip install .
 closure --version
 closure help verify
 closure init -p my-project

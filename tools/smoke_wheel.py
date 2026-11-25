@@ -36,10 +36,12 @@ with contextlib.redirect_stdout(io.StringIO()):
     assert main(['init','--project',str(root)]) == 0
 project = Project(root)
 assert project.check()['valid']
+assert project.manifest.schema_version == 'closure/0.2' and project.composition is None
 assert not Engine(project).build(trusted=True)['gate']
 approve_baseline(project,'Package smoke check','Review the unchanged disposable starter fixture')
 report = Engine(root).build(trusted=True)
-assert report['gate']
+assert report['gate'] and report['schema'] == 'closure-report/0.2'
+assert report['analyses'][0]['record']['protocol'] == 'closure-evidence/0.2'
 assert Engine(root).plan()['gate']
 export_report(root,root/'report')
 assert (root/'report/index.html').is_file()
@@ -56,7 +58,7 @@ with contextlib.redirect_stdout(structured), contextlib.redirect_stderr(io.Strin
 assert not errors.getvalue()
 cli_report = json.loads(structured.getvalue())
 assert cli_report['gate'] and cli_report['executed'] == ['system.evaluate']
-assert (root/'schema/runner-response.schema.json').is_file()
+assert json.loads((root/'schema/runner-response.schema.json').read_bytes())['properties']['protocol']['const'] == 'closure-run/0.2'
 assert (root/'schema/report.schema.json').is_file()
 print(json.dumps({'package':str(package),'project':report['project'],'gate':report['gate'],
                   'analyses':len(report['analyses']),'report':report['id'],

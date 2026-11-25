@@ -63,7 +63,7 @@ with contextlib.redirect_stdout(sys.stderr):
                 overlaps.append({"sample": index, "parts": [a,b], "volume_mm3": volume})
         records.append(point)
     solid_valid = all(shape.isValid() and len(shape.Solids())==1 and shape.Volume()>0 for shape in parts.values())
-    audit = {"schema": "closure-contact-audit/0.1", "sample_count": len(selected),
+    audit = {"schema": "closure-contact-audit/0.2", "sample_count": len(selected),
              "parts": sorted(parts), "all_connected_valid": solid_valid,
              "maximum_intersection_mm3": maximum, "tolerance_mm3": tolerance,
              "samples": records, "overlaps": overlaps,

@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from pydantic import ValidationError
 from .io import ClosureError, load_source, digest, file_digest, primitive, within
-from .models import CompositionManifest, Manifest, Module, Datum, Binding, Criterion
+from .models import CompositionManifest, Manifest, Module, Datum, Binding, Criterion, manifest_model, require_current_source
 from .units import compatible, convert
 
 
@@ -178,8 +178,9 @@ class Project:
         if before != file_digest(path):
             raise ClosureError("Definition changed during loading", "SOURCE_CONFLICT", str(path))
         self.document_hashes[path] = before
-        if model is Manifest and document.get("schema") == "closure/0.2":
-            model = CompositionManifest
+        require_current_source(document, path)
+        if model is Manifest:
+            model = manifest_model(document)
         try:
             result = model.model_validate(primitive(document))
         except ValidationError as exc:

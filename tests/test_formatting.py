@@ -31,7 +31,7 @@ def test_format_preserves_model_baseline_cache_and_comments(project_dir):
 
 def test_format_keeps_meaningful_empty_values_and_comments():
     parser=YAML(typ='rt')
-    source=parser.load('''schema: closure/0.1
+    source=parser.load('''schema: closure/0.2
 module: example
 owner: Tests
 parameters:
@@ -53,7 +53,7 @@ analyses:
     assert "count: {value: 0}" in formatted
     assert 'result: {unit: W}' in formatted
     assert render_source(parser.load(formatted)) == formatted
-    manifest=parser.load('schema: closure/0.1\nproject: empty\nscope: []\nscenarios: {}\n')
+    manifest=parser.load('schema: closure/0.2\nkind: standalone\nproject: empty\nscope: []\nscenarios: {}\n')
     assert Manifest.model_validate(parser.load(render_source(manifest)))==Manifest.model_validate(manifest)
     assert 'scope: []' in render_source(manifest)
 

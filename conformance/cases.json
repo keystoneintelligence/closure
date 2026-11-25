@@ -3,8 +3,9 @@
     "name": "minimal manifest",
     "schema": "project",
     "document": {
-      "schema": "closure/0.1",
-      "project": "demo"
+      "schema": "closure/0.2",
+      "project": "demo",
+      "kind": "standalone"
     },
     "valid": true
   },
@@ -13,7 +14,8 @@
     "schema": "project",
     "document": {
       "schema": "closure/99",
-      "project": "demo"
+      "project": "demo",
+      "kind": "standalone"
     },
     "valid": false
   },
@@ -21,9 +23,10 @@
     "name": "unknown manifest field",
     "schema": "project",
     "document": {
-      "schema": "closure/0.1",
+      "schema": "closure/0.2",
       "project": "demo",
-      "magic": 1
+      "magic": 1,
+      "kind": "standalone"
     },
     "valid": false
   },
@@ -31,7 +34,7 @@
     "name": "minimal module",
     "schema": "module",
     "document": {
-      "schema": "closure/0.1",
+      "schema": "closure/0.2",
       "module": "power",
       "owner": "Team"
     },
@@ -41,7 +44,7 @@
     "name": "missing owner",
     "schema": "module",
     "document": {
-      "schema": "closure/0.1",
+      "schema": "closure/0.2",
       "module": "power"
     },
     "valid": false
@@ -50,7 +53,7 @@
     "name": "normalized request",
     "schema": "runner-request",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "context": {
         "scenario": "nominal",
@@ -108,7 +111,7 @@
     "name": "short invocation ID",
     "schema": "runner-request",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "abc",
       "context": {
         "scenario": "nominal",
@@ -137,7 +140,7 @@
     "name": "string numeric input",
     "schema": "runner-request",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "context": {
         "scenario": "nominal",
@@ -165,7 +168,7 @@
     "name": "valid output",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "total": {
@@ -180,7 +183,7 @@
     "name": "numeric boolean rejected",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "total": {
@@ -195,7 +198,7 @@
     "name": "invalid residual",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "total": {
@@ -213,7 +216,7 @@
     "name": "nonboolean convergence",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "total": {
@@ -229,7 +232,7 @@
     "name": "unknown response field",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "total": {
@@ -245,7 +248,7 @@
     "name": "valid artifact shape",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "mesh": {
@@ -263,13 +266,51 @@
     "name": "artifact scalar conflict",
     "schema": "runner-response",
     "document": {
-      "protocol": "closure-run/0.1",
+      "protocol": "closure-run/0.2",
       "invocation_id": "0123456789abcdef0123456789abcdef",
       "outputs": {
         "mesh": {
           "type": "artifact",
           "path": "mesh.glb",
           "value": 42
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "0.1 source requires migration",
+    "schema": "project",
+    "document": {
+      "schema": "closure/0.1",
+      "project": "legacy"
+    },
+    "valid": false
+  },
+  {
+    "name": "composition manifest",
+    "schema": "composed-project",
+    "document": {
+      "schema": "closure/0.2",
+      "project": "root",
+      "children": {
+        "child": {
+          "path": "child"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "0.1 runner response rejected",
+    "schema": "runner-response",
+    "document": {
+      "protocol": "closure-run/0.1",
+      "invocation_id": "0123456789abcdef0123456789abcdef",
+      "outputs": {
+        "total": {
+          "value": 180,
+          "unit": "W"
         }
       }
     },

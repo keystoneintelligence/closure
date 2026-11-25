@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 from .io import ClosureError, within
-from .models import Analysis, CompositionManifest, Manifest, Module, Requirement
+from .models import Analysis, CompositionManifest, Manifest, ProjectManifest, Module, Requirement
 
 
 def manifest_path(path):
@@ -62,7 +62,7 @@ def contract_bindings(contract):
 @dataclass
 class Unit:
     path: Path
-    manifest: Manifest
+    manifest: ProjectManifest
     owned: bool = False
     imports: dict = field(default_factory=dict)
     children: dict = field(default_factory=dict)

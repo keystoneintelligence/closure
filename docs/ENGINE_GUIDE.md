@@ -2,7 +2,7 @@
 
 ## Project structure
 
-A project has `project.yaml`, one or more module documents, optional studies, ordinary analysis programs, and review records. The `schema` value is `closure/0.1`. See `examples/power/` for a complete executable example and `schema/` for the generated contract definitions.
+A project has `project.yaml`, one or more module documents, optional studies, ordinary analysis programs, and review records. The `schema` value is `closure/0.2`. Use `kind: standalone` in a standalone manifest. See `examples/power/` for a complete executable example and `schema/` for the generated contract definitions.
 
 The loader accepts the JSON-compatible subset of YAML 1.2. It rejects duplicate or non-string keys, YAML tags, aliases, anchors, merge keys, non-finite numbers, unknown contract fields, excessive depth, and documents over 2 MB. Source locations appear in linking and cycle diagnostics.
 
@@ -34,7 +34,7 @@ Closure copies declared sources and artifacts into a temporary execution directo
 
 ```json
 {
-  "protocol": "closure-run/0.1",
+  "protocol": "closure-run/0.2",
   "invocation_id": "engine-assigned-id",
   "context": {"scenario": "nominal", "configuration": "default", "point": "baseline"},
   "inputs": {"load": {"type": "quantity", "value": 80, "unit": "W", "qualifiers": {}}},
@@ -49,7 +49,7 @@ The program writes one JSON response on stdout and diagnostics on stderr:
 
 ```json
 {
-  "protocol": "closure-run/0.1",
+  "protocol": "closure-run/0.2",
   "invocation_id": "engine-assigned-id",
   "outputs": {"total": {"value": 180, "unit": "W"}}
 }
@@ -99,10 +99,10 @@ Historical inspection verifies the report/record digests and output artifact byt
 
 New run records also archive consumed input files and mark them with `inputs_archived: true`. Their integrity checks include those input bytes, and portable exports include them with `role: input` in the artifact manifest. A program that modifies its copied input cannot publish evidence. Legacy records without this flag retain their original input digests, but may require the original source files to inspect those inputs.
 
-## Version 0.1 model and interoperability boundaries
+## Version 0.2 model and interoperability boundaries
 
 The persisted model includes module ownership, typed values and producer bindings, contexts, verification criteria, and evidence/review records. The exported dependency graph currently exposes `contains`, `consumes`, `produces`, `verifies` and `derived_from` edges. Ownership and evidence support/acceptance are represented in the associated module, assessment and record fields rather than additional free-form graph edges. Arbitrary `allocated_to` relations and a general systems-modeling metamodel are unsupported.
 
-Stable IDs survive file moves. Renaming a namespace requires an explicit source migration updating its references and exports; there is no automated rename/migration command. Source and runner versions are `closure/0.1` and `closure-run/0.1`; schema changes must preserve these contracts or introduce a new version. Diagnostic codes are machine-readable and covered by conformance tests, with filenames/locations where available.
+Stable IDs survive file moves. Renaming a namespace requires an explicit source migration updating its references and exports; there is no automated rename/migration command. Source and runner versions are `closure/0.2` and `closure-run/0.2`; schema changes must preserve these contracts or introduce a new version. Diagnostic codes are machine-readable and covered by conformance tests, with filenames/locations where available.
 
 There is no SysML v2 or ReqIF import/export adapter in this release. Their supported conversion subset is therefore empty: behavior/state-machine semantics, arbitrary allocations, inheritance, variation models and lossless document exchange are not supported. Existing tools integrate through typed JSON runners and file artifacts. The project does not claim a full SysML implementation, distributed execution, authenticated review signatures, a security sandbox, optimization, or formal verification of physical models.

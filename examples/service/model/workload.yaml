@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: workload
 name: Workload
 owner: Application engineering

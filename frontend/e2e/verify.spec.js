@@ -1,7 +1,7 @@
 import {test as base, expect} from '@playwright/test';
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -140,7 +140,8 @@ test('composed power history and project navigation', async ({page, serviceURL},
   const baseline = page.getByRole('region', {name: 'Obligation baseline'});
   await expect(baseline.getByText('electronics', {exact: true})).toBeVisible();
   await expect(baseline.getByText('current', {exact: true})).toBeVisible();
-  await expect(baseline.getByText('Closure example', {exact: true})).toBeVisible();
+  const childBaseline = JSON.parse(readFileSync(new URL('../../examples/composed-power/electronics/reviews/baseline.json', import.meta.url), 'utf8'));
+  await expect(baseline.getByText(childBaseline.reviewer, {exact: true})).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Electronics reviewer');
   await expect(page.getByRole('dialog')).toContainText('Checked the component allocation.');
   await page.keyboard.press('Escape');

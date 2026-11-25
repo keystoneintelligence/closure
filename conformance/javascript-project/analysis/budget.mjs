@@ -2,7 +2,7 @@
 import {readFileSync} from 'node:fs';
 
 const request = JSON.parse(readFileSync(0, 'utf8'));
-if (request.protocol !== 'closure-run/0.1' || !/^[a-f0-9]{32}$/.test(request.invocation_id)) {
+if (request.protocol !== 'closure-run/0.2' || !/^[a-f0-9]{32}$/.test(request.invocation_id)) {
   throw Error('Unsupported runner protocol or invocation identity');
 }
 function watts(name) {

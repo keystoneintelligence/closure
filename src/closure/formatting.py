@@ -13,13 +13,14 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .io import ClosureError, load_source, primitive
-from .models import CompositionManifest, Manifest, Module, Study
+from .models import Module, Study, manifest_model, require_current_source
 
 
 def source_model(document):
-    if document.get("schema") == "closure/0.2" and "project" in document:
-        return CompositionManifest
-    for key, model in (("module", Module), ("project", Manifest), ("study", Study)):
+    require_current_source(document)
+    if "project" in document:
+        return manifest_model(document)
+    for key, model in (("module", Module), ("study", Study)):
         if key in document:
             return model
     raise ClosureError("Expected a Closure project, module or study", "FORMAT_SOURCE")

@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: click-pen
 name: Click / engineering demonstrator
 description: A retractable pen designed by eight cooperating teams. Analytical concept gate; 

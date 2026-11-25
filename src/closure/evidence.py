@@ -16,7 +16,11 @@ from pathlib import Path
 from .io import ClosureError, atomic_json, canonical, digest, file_digest, read_json, within
 from .units import validate_value
 from .processes import managed_process
-from .protocol import validate_report, EvidenceRecord, RunnerRequest, RunnerResponse
+from .protocol import EvidenceRecord, RunnerRequest, RunnerResponse, validate_report, validate_saved_evidence, validate_saved_report
+
+
+RUNNER_PROTOCOL = "closure-run/0.2"
+EVIDENCE_PROTOCOL = "closure-evidence/0.2"
 
 
 def utcnow():
@@ -182,9 +186,9 @@ class EvidenceStore:
 
     def _verify_record(self, record, artifacts=True):
         try:
-            EvidenceRecord.model_validate(record)
+            validate_saved_evidence(record)
             body = {k: v for k, v in record.items() if k != "record_hash"}
-            if record.get("protocol") != "closure-evidence/0.1" or digest(body) != record.get("record_hash"):
+            if digest(body) != record.get("record_hash"):
                 raise ValueError("record digest mismatch")
             if artifacts:
                 values = list(record["outputs"].values())
@@ -230,7 +234,7 @@ class EvidenceStore:
         if "report_hash" not in report or "model" not in report:
             raise ClosureError("This legacy report has no sealed model snapshot. Its individual run records remain inspectable; build again to create a full snapshot.", "REPORT_UNSEALED")
         try:
-            validate_report(report)
+            validate_saved_report(report)
             body = {k: v for k, v in report.items() if k != "report_hash"}
             if digest(body) != report["report_hash"]:
                 raise ValueError("report digest mismatch")
@@ -264,7 +268,7 @@ class EvidenceStore:
         if record_id:
             try:
                 record = self.load_run(record_id)
-                if record.get("execution_key") == key:
+                if record["protocol"] == EVIDENCE_PROTOCOL and record.get("execution_key") == key:
                     return "current", record
             except (ClosureError, OSError):
                 pass
@@ -321,7 +325,7 @@ class EvidenceStore:
                     envelope["path"] = str(target)
             output_dir = snapshot / "outputs"
             output_dir.mkdir()
-            request = {"protocol": "closure-run/0.1", "invocation_id": invocation, "inputs": run_inputs,
+            request = {"protocol": RUNNER_PROTOCOL, "invocation_id": invocation, "inputs": run_inputs,
                        "context": context, "settings": analysis.settings, "seed": analysis.run.seed, "output_dir": str(output_dir),
                        "tools": tools or {"executables": {}, "files": {}}}
             command = resolve_executable(analysis.run.argv)
@@ -368,9 +372,11 @@ class EvidenceStore:
                     return result
                 response = json.loads(stdout_path.read_text(encoding="utf-8"), object_pairs_hook=unique_pairs,
                                       parse_constant=lambda s: (_ for _ in ()).throw(ValueError(s)))
+                if isinstance(response, dict) and response.get("protocol") == "closure-run/0.1":
+                    raise ValueError(f"Update the runner to accept and return {RUNNER_PROTOCOL}")
                 RunnerResponse.model_validate(response)
-                if response.get("protocol") != "closure-run/0.1" or response.get("invocation_id") != invocation:
-                    raise ValueError("protocol or invocation identity mismatch")
+                if response["invocation_id"] != invocation:
+                    raise ValueError("invocation identity mismatch")
                 if set(response.get("outputs", {})) != set(analysis.outputs):
                     raise ValueError("output names differ from contract")
                 if analysis.solver and response.get("converged") is not True:
@@ -391,7 +397,7 @@ class EvidenceStore:
             for value in run_inputs.values():
                 if value.get("type") == "artifact":
                     self.archive_artifact(value["path"], value["sha256"])
-            record = {"id": invocation, "protocol": "closure-evidence/0.1", "analysis": project.evidence_id(identifier), "execution_key": key,
+            record = {"id": invocation, "protocol": EVIDENCE_PROTOCOL, "analysis": project.evidence_id(identifier), "execution_key": key,
                       "started_at": started, "finished_at": utcnow(), "context": context, "inputs": inputs, "outputs": outputs,
                       "inputs_archived": True,
                       "sources": source_files, "environment": environment, "command": command, "upstream": upstream,

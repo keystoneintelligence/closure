@@ -7,7 +7,7 @@ Closure source should let a reader follow a value from its definition to its con
 Define an independently chosen value in its owning module. Include units and a useful explanation; identify assumptions and their rationale. Export values that other modules consume. A computed value belongs in an analysis output. Consumers bind to the owning symbol instead of copying a number into another module or script.
 
 ```yaml
-schema: closure/0.1
+schema: closure/0.2
 module: spring
 owner: Spring engineering
 

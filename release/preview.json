@@ -4,7 +4,7 @@
   "viewer_version": "0.2.0-alpha.1",
   "specification_version": "closure/0.2",
   "specification_revision": "preview.1",
-  "runner_protocol": "closure-run/0.1",
+  "runner_protocol": "closure-run/0.2",
   "viewer_api": "closure-viewer/0.2",
   "proposed_license": "Apache-2.0",
   "copyright_owner": "Keystone Intelligence LLC",

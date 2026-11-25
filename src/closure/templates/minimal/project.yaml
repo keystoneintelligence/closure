@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: engineering-project
 name: My engineering project
 description: Replace the starter contract, analysis and criterion with your engineering model.

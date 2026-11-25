@@ -14,7 +14,7 @@ def tool_contract(project_dir, tools=None, tool_files=None):
 def test_external_tool_identity_reaches_runner_and_evidence(project_dir):
     tool_contract(project_dir, {"simulator": "python"})
     runner(project_dir, "assert r['tools']['executables']['simulator']['sha256']\n"
-           "json.dump({'protocol':'closure-run/0.1','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
+           "json.dump({'protocol':'closure-run/0.2','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
     report = Engine(project_dir).build(trusted=True)
     assert report["gate"]
     record = report["analyses"][0]["record"]
@@ -49,7 +49,7 @@ def test_tool_mutation_during_run_cannot_publish_evidence(project_dir):
     dependency.write_bytes(b"before")
     tool_contract(project_dir, tool_files=["runtime.bin"])
     runner(project_dir, f"pathlib.Path({str(dependency)!r}).write_bytes(b'after')\n"
-           "json.dump({'protocol':'closure-run/0.1','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
+           "json.dump({'protocol':'closure-run/0.2','invocation_id':r['invocation_id'],'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
     result = Engine(project_dir).build(trusted=True)
     assert result["analyses"][0]["error"]["code"] == "TOOL_MUTATION"
     assert not result["gate"] and not (project_dir / ".closure/runs").exists()

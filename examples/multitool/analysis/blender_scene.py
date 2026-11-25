@@ -27,7 +27,7 @@ manifest = {"blender_version": bpy.app.version_string, "build_hash": bpy.app.bui
             "scope": "Evaluated bounding dimensions of a rectangular fluid-domain mesh."}
 (output / "geometry.json").write_text(json.dumps(manifest, indent=2))
 artifact = lambda name, media: {"path": str(output/name), "media_type": media}
-response = {"protocol": "closure-run/0.1", "invocation_id": request["invocation_id"], "outputs": {
+response = {"protocol": "closure-run/0.2", "invocation_id": request["invocation_id"], "outputs": {
     "length": {"value": sizes[0], "unit": "m"}, "height": {"value": sizes[1], "unit": "m"}, "depth": {"value": sizes[2], "unit": "m"},
     "volume": {"value": sizes[0]*sizes[1]*sizes[2], "unit": "m^3"},
     "model": artifact("cavity.glb", "model/gltf-binary"), "blend": artifact("cavity.blend", "application/x-blender"),

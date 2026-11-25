@@ -67,7 +67,7 @@ def test_T06_transitive_python_import_invalidates(project_dir):
 
 def test_T07_unrelated_change_reuses_analysis(project_dir):
     baseline = Engine(project_dir).build(trusted=True)
-    (project_dir / "model/unrelated.yaml").write_text("schema: closure/0.1\nmodule: unrelated\nowner: Other team\nparameters:\n  count: {value: 12}\n")
+    (project_dir / "model/unrelated.yaml").write_text("schema: closure/0.2\nmodule: unrelated\nowner: Other team\nparameters:\n  count: {value: 12}\n")
     result = Engine(project_dir).build(trusted=True)
     assert result["gate"]
     assert result["source_hash"] != baseline["source_hash"]
@@ -76,7 +76,7 @@ def test_T07_unrelated_change_reuses_analysis(project_dir):
 
 
 def artifact_analysis(path):
-    runner(path, "p = pathlib.Path(r['output_dir']) / 'shape.stl'\np.write_text('engineering artifact')\njson.dump({'protocol':'closure-run/0.1', 'invocation_id':r['invocation_id'], 'outputs':{'total':{'value':180,'unit':'W'}, 'shape':{'path':str(p)}}}, sys.stdout)",
+    runner(path, "p = pathlib.Path(r['output_dir']) / 'shape.stl'\np.write_text('engineering artifact')\njson.dump({'protocol':'closure-run/0.2', 'invocation_id':r['invocation_id'], 'outputs':{'total':{'value':180,'unit':'W'}, 'shape':{'path':str(p)}}}, sys.stdout)",
            {"total": {"type": "quantity", "unit": "W"}, "shape": {"type": "artifact"}})
 
 
@@ -108,7 +108,7 @@ def test_T09_crash_does_not_publish_partial_evidence(project_dir):
     ("{'value':180,'unit':'W'}", "'wrong-invocation'"),
 ])
 def test_T10_bad_runner_output_rejected(project_dir, output, invocation):
-    runner(project_dir, f"json.dump({{'protocol':'closure-run/0.1','invocation_id':{invocation},'outputs':{{'total':{output}}}}},sys.stdout)")
+    runner(project_dir, f"json.dump({{'protocol':'closure-run/0.2','invocation_id':{invocation},'outputs':{{'total':{output}}}}},sys.stdout)")
     result = Engine(project_dir).build(trusted=True)
     assert not result["gate"]
     assert assessment(result)["execution"] == "error"
@@ -236,7 +236,7 @@ def test_T23_cycle_diagnostic_has_source_location(project_dir):
 
 def test_T24_nonconvergence_is_not_evidence(project_dir):
     edit_yaml(project_dir / "model/power.yaml", lambda d: d["analyses"]["budget"].update(solver=True))
-    runner(project_dir, "json.dump({'protocol':'closure-run/0.1','invocation_id':r['invocation_id'],'converged':False,'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
+    runner(project_dir, "json.dump({'protocol':'closure-run/0.2','invocation_id':r['invocation_id'],'converged':False,'outputs':{'total':{'value':180,'unit':'W'}}},sys.stdout)")
     result = Engine(project_dir).build(trusted=True)
     assert not result["gate"]
     assert assessment(result)["execution"] == "error"

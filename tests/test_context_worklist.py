@@ -16,7 +16,7 @@ HEADROOM = "service-capacity::operations.CAP-001"
 
 @pytest.fixture
 def cli(service, capsys):
-    edit_yaml(service / "project.yaml", lambda d: d.update(schema="closure/0.2"))
+    edit_yaml(service / "project.yaml", lambda d: d.pop("kind"))
     edit_yaml(service / "model/operations.yaml", lambda d: d["requirements"]["CAP-001"].update(
         applies_to=["surge"], configurations=["expanded"]))
 

@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: power
 name: Power system
 owner: Power team
