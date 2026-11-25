@@ -25,13 +25,50 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install core development dependencies
         run: python -m pip install -e ".[dev,mission,release]"
+      - name: Check the composition
+        run: closure check --project examples/composed-power
+      - name: Verify the composition at the checked-out revision
+        id: assessment
+        shell: python
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          import json, os, subprocess, sys
+          from pathlib import Path
+          from closure.cli_output import render
+
+          project = Path("examples/composed-power")
+          result = subprocess.run(["closure", "verify", "--project", str(project), "--trusted", "--json"], stdout=subprocess.PIPE)
+          if result.returncode in (0, 1):
+              report = json.loads(result.stdout)
+              print(render(report, "verify", project))
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as outputs:
+                  print(f"report_id={report['id']}", file=outputs)
+          else:
+              sys.stdout.buffer.write(result.stdout)
+          sys.exit(result.returncode)
+      - name: Export the sealed composition report
+        id: export_composition
+        if: ${{ !cancelled() && steps.assessment.outputs.report_id != '' }}
+        env:
+          REPORT_ID: ${{ steps.assessment.outputs.report_id }}
+        shell: bash
+        run: closure export --project examples/composed-power --report "$REPORT_ID" --output dist/composed-report
+      - name: Check report provenance
+        if: ${{ !cancelled() && steps.export_composition.outcome == 'success' }}
+        shell: python
+        env:
+          VERIFY_OUTCOME: ${{ steps.assessment.outcome }}
+        run: |
+          import json, os, subprocess
+          from pathlib import Path
+
+          report = json.loads(Path("dist/composed-report/report.json").read_bytes())
+          assert report["gate"] == (os.environ["VERIFY_OUTCOME"] == "success")
+          assert report["revision"]["state"] == "committed inputs"
+          assert report["revision"]["commit"] == subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
       - name: Verify core and cross-domain workflows
         run: python -m pytest -q --ignore=tests/test_pen.py --junitxml=docs/verification/preview-core.xml
-      - name: Verify the composition at the checked-out revision
-        run: |
-          closure check --project examples/composed-power
-          closure verify --project examples/composed-power --trusted
-          python -c "import json, subprocess; from pathlib import Path; p=Path('examples/composed-power'); r=json.loads((p/'.closure/report.json').read_bytes()); assert r['gate'] and r['revision']['state']=='committed inputs' and r['revision']['commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(); subprocess.run(['closure','export','--project',str(p),'--report',r['id'],'--output','dist/composed-report'],check=True)"
       - name: Install viewer dependencies
         run: npm --prefix frontend ci
       - name: Verify project-driven visualization behavior
