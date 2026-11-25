@@ -23,4 +23,4 @@ def artifact(path, media_type="application/json"):
 
 
 def write(request, outputs):
-    json.dump({"protocol": "closure-run/0.1", "invocation_id": request["invocation_id"], "outputs": outputs}, sys.stdout, allow_nan=False)
+    json.dump({"protocol": "closure-run/0.2", "invocation_id": request["invocation_id"], "outputs": outputs}, sys.stdout, allow_nan=False)

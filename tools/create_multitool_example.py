@@ -20,12 +20,12 @@ def port(kind):
 def requirement(text, actual, op, limit):
     return {"text": text, "verify": {"actual": ref(actual), "op": op, "limit": limit}}
 
-save("project.yaml", {"schema": "closure/0.1", "project": "blender-openfoam", "name": "Cavity / connected tools",
+save("project.yaml", {"schema": "closure/0.2", "kind": "standalone", "project": "blender-openfoam", "name": "Cavity / connected tools",
     "description": "A real Blender file supplies geometry to Python and an OpenFOAM transient flow case.",
     "modules": ["model/*.yaml"], "policy": {"name": "integration-demonstration", "accepted_evidence": ["assumed", "predicted"],
     "description": "Checks tool-chain execution and declared numerical criteria; no steady-state or physical validation claim."}})
 geometry_outputs = {k: port(v) for k,v in {"length":"m", "height":"m", "depth":"m", "volume":"m^3", "model":"artifact", "blend":"artifact", "inspection":"artifact"}.items()}
-save("model/geometry.yaml", {"schema":"closure/0.1", "module":"geometry", "name":"Blender geometry", "owner":"Design team", "color":"#8f77de",
+save("model/geometry.yaml", {"schema":"closure/0.2", "module":"geometry", "name":"Blender geometry", "owner":"Design team", "color":"#8f77de",
     "parameters":{"design":{"type":"artifact","path":"assets/domain.blend"}, "length":q(.1,"m"), "height":q(.1,"m"), "depth":q(.01,"m")},
     "analyses":{"export":{"description":"Load an actual Blender asset, apply dimensions and export GLB, blend and measured envelope.",
         "run":{"argv":["python","analysis/blender_driver.py"], "sources":["analysis/blender_driver.py","analysis/blender_scene.py"],
@@ -34,7 +34,7 @@ save("model/geometry.yaml", {"schema":"closure/0.1", "module":"geometry", "name"
         "inputs":{k:ref("geometry."+k, "m" if k!="design" else None) for k in ("design","length","height","depth")}, "outputs":geometry_outputs}},
     "requirements":{"GEO-001":requirement("Fluid-domain envelope volume shall be positive.", "geometry.export.volume", "gt", q(0,"m^3"))},
     "exports":["export."+k for k in geometry_outputs]})
-save("model/physics.yaml", {"schema":"closure/0.1", "module":"physics", "name":"Python fluid scaling", "owner":"Analysis team", "color":"#30b897",
+save("model/physics.yaml", {"schema":"closure/0.2", "module":"physics", "name":"Python fluid scaling", "owner":"Analysis team", "color":"#30b897",
     "parameters":{"lid_speed":q(1,"m/s"), "viscosity":{**q(.001,"m^2/s"),"origin":"assumption","rationale":"Synthetic laminar fluid for the Re=100 cavity example."},
         "end_time":q(1,"s"), "time_step":q(.002,"s"), "max_reynolds":q(200)},
     "analyses":{"scaling":{"run":{"argv":["python","analysis/dimensionless.py"],"sources":["analysis/dimensionless.py"]},
@@ -43,7 +43,7 @@ save("model/physics.yaml", {"schema":"closure/0.1", "module":"physics", "name":"
     "requirements":{"FLOW-001":requirement("The example shall remain within its declared low-Reynolds-number scope.","physics.scaling.reynolds","lte",ref("physics.max_reynolds"))},
     "exports":["lid_speed","viscosity","end_time","time_step","scaling.reynolds"]})
 fluid_outputs={k:port(v) for k,v in {"mesh_valid":"boolean","cells":"scalar","final_time":"s","max_courant":"scalar","continuity_error":"scalar","max_velocity":"m/s","recirculating_cells":"scalar","diagnostics":"artifact","case":"artifact"}.items()}
-save("model/fluid.yaml", {"schema":"closure/0.1", "module":"fluid", "name":"OpenFOAM simulation", "owner":"CFD team", "color":"#e39c52",
+save("model/fluid.yaml", {"schema":"closure/0.2", "module":"fluid", "name":"OpenFOAM simulation", "owner":"CFD team", "color":"#e39c52",
     "analyses":{"cavity":{"description":"Execute blockMesh, checkMesh and icoFoam in WSL, with geometry bound from Blender.",
         "run":{"argv":["python","analysis/openfoam_driver.py"],"sources":["analysis/openfoam_driver.py","analysis/openfoam_worker.py","analysis/openfoam_environment.sh","case/"],
                "tools":{"wsl":"wsl.exe"},"timeout":240,"max_output_bytes":2000000,

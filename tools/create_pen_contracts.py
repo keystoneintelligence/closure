@@ -26,7 +26,7 @@ def datum(value,unit=None,description="",assumption=False):
 
 
 def team(name,title,owner,color,description,parameters):
-    return {"schema":"closure/0.1","module":name,"name":title,"owner":owner,"color":color,"description":description,
+    return {"schema":"closure/0.2","module":name,"name":title,"owner":owner,"color":color,"description":description,
             "parameters":parameters,"analyses":{},"requirements":{},"exports":list(parameters)}
 
 
@@ -155,10 +155,10 @@ for key,text in [("TEST-001","Prototype shall pass 10,000 physical click cycles 
     verification["requirements"][key]={"text":text,"method":"test" if key!="TEST-003" else "inspection","required":False,"review_required":True}
 for module in (product,materials,refill,barrel,spring,mechanism,manufacturing,verification):
     save(Path("model")/(module["module"]+".yaml"),module)
-save(Path("project.yaml"),{"schema":"closure/0.1","project":"click-pen","name":"Click / engineering demonstrator",
+save(Path("project.yaml"),{"schema":"closure/0.2","kind":"standalone","project":"click-pen","name":"Click / engineering demonstrator",
     "description":"A retractable pen designed by eight cooperating teams. Analytical concept gate; physical validation obligations remain visible.",
     "modules":["model/*.yaml"],"policy":{"name":"analytical-concept","accepted_evidence":["assumed","predicted"],
     "description":"Accept deterministic analytical and CAD evidence under explicitly declared assumptions. Manufacturing release requires physical tests."}})
-save(Path("studies/spring_trade.yaml"),{"schema":"closure/0.1","study":"spring-wire-trade","grid":{
+save(Path("studies/spring_trade.yaml"),{"schema":"closure/0.2","study":"spring-wire-trade","grid":{
     "spring.wire":[datum(x,"mm") for x in (0.40,0.45,0.55)],"mechanism.friction_coefficient":[datum(x) for x in (0.10,0.25)]}})
 print(f"Created pen contracts in {ROOT}")

@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, TypeAdapter
 
-from .models import CompositionManifest, Datum, Manifest, Module, Policy
+from .models import CompositionManifest, Datum, Manifest, Module, Policy, ProjectManifest
 
 Number = StrictInt | Annotated[float, Field(strict=True, allow_inf_nan=False)]
 Scalar = Number | StrictBool | StrictStr
@@ -109,7 +109,7 @@ class Tools(RuntimeContract):
 
 
 class RunnerRequest(RuntimeContract):
-    protocol: Literal["closure-run/0.1"]
+    protocol: Literal["closure-run/0.2"]
     invocation_id: Identity
     context: Context
     inputs: dict[str, Value]
@@ -120,7 +120,7 @@ class RunnerRequest(RuntimeContract):
 
 
 class RunnerResponse(RuntimeContract):
-    protocol: Literal["closure-run/0.1"]
+    protocol: Literal["closure-run/0.2"]
     invocation_id: Identity
     outputs: dict[str, Envelope]
     converged: bool | None = None
@@ -137,7 +137,7 @@ class Environment(RuntimeContract):
 
 
 class EvidenceRecord(RuntimeContract):
-    protocol: Literal["closure-evidence/0.1"]
+    protocol: Literal["closure-evidence/0.2"]
     id: Identity
     analysis: Text
     execution_key: Hash
@@ -189,7 +189,7 @@ class VerificationBranch(RuntimeContract):
 
 
 class ReviewRecord(RuntimeContract):
-    schema_version: Literal["closure-review/0.1"] = Field(alias="schema")
+    schema_version: Literal["closure-review/0.2"] = Field(alias="schema")
     requirement: str
     context: Context
     decision: Literal["accepted", "waived", "rejected", "not_applicable"]
@@ -266,7 +266,7 @@ class Assumption(Datum):
 
 
 class Report(RuntimeContract):
-    schema_version: Literal["closure-report/0.1"] = Field(alias="schema")
+    schema_version: Literal["closure-report/0.2"] = Field(alias="schema")
     id: Identity
     created_at: Text
     project: str
@@ -332,7 +332,6 @@ class AssessmentComparison(RuntimeContract):
 
 
 class ComposedReport(Report):
-    schema_version: Literal["closure-report/0.2"] = Field(alias="schema")
     project_baselines: dict[str, BaselineAssessment] = Field(default_factory=dict)
     baseline_changes: list[str] = Field(default_factory=list)
     revision: Revision | None = None
@@ -343,12 +342,12 @@ class ComposedReport(Report):
 
 
 def validate_report(report):
-    model = ComposedReport if report.get("schema") == "closure-report/0.2" else Report
+    model = ComposedReport if "projects" in report or "gates" in report else Report
     return model.model_validate(report)
 
 
 class StudyResult(RuntimeContract):
-    schema_version: Literal["closure-study/0.1"] = Field(alias="schema")
+    schema_version: Literal["closure-study/0.2"] = Field(alias="schema")
     study: str
     expected: int = Field(ge=1)
     completed: int = Field(ge=0)
@@ -361,3 +360,69 @@ class StudyResult(RuntimeContract):
 RUNTIME_SCHEMAS = {"runner-request": RunnerRequest, "runner-response": RunnerResponse,
                    "evidence": EvidenceRecord, "report": Report, "composed-report": ComposedReport, "study-result": StudyResult,
                    "review": ReviewRecord}
+
+
+# Earlier sealed reports embed their original source models, runs and reviews.
+# Keep their validation separate from the models used by live writes and schemas.
+class _ArchivedManifest(ProjectManifest):
+    schema_version: Literal["closure/0.1"] = Field(alias="schema")
+
+
+class _ArchivedModule(Module):
+    schema_version: Literal["closure/0.1"] = Field(alias="schema")
+
+
+class _ArchivedEvidence(EvidenceRecord):
+    protocol: Literal["closure-evidence/0.1"]
+
+
+class _ArchivedReview(ReviewRecord):
+    schema_version: Literal["closure-review/0.1"] = Field(alias="schema")
+
+
+class _ArchivedAssessment(Assessment):
+    review: _ArchivedReview | None
+
+
+class _ArchivedAnalysis(AnalysisState):
+    record: _ArchivedEvidence | None
+
+
+class _ArchivedModel(ModelSnapshot):
+    project: _ArchivedManifest
+    modules: list[_ArchivedModule]
+
+
+class _ArchivedComposedModel(ComposedModel):
+    modules: list[_ArchivedModule]
+
+
+class _ArchivedReport(Report):
+    schema_version: Literal["closure-report/0.1"] = Field(alias="schema")
+    model: _ArchivedModel
+    requirements: list[_ArchivedAssessment]
+    analyses: list[_ArchivedAnalysis]
+
+
+class _ArchivedComposedReport(ComposedReport):
+    model: _ArchivedComposedModel
+    requirements: list[_ArchivedAssessment]
+    analyses: list[_ArchivedAnalysis]
+
+
+_saved_composed_report = TypeAdapter(ComposedReport | _ArchivedComposedReport)
+
+
+def validate_saved_report(report):
+    if report.get("schema") == "closure-report/0.1":
+        return _ArchivedReport.model_validate(report)
+    if "projects" in report or "gates" in report:
+        # Both composition generations used closure-report/0.2. Each accepts
+        # only its own complete set of embedded source and record versions.
+        return _saved_composed_report.validate_python(report)
+    return Report.model_validate(report)
+
+
+def validate_saved_evidence(record):
+    model = _ArchivedEvidence if record.get("protocol") == "closure-evidence/0.1" else EvidenceRecord
+    return model.model_validate(record)

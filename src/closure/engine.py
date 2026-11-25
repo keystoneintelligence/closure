@@ -11,10 +11,10 @@ from contextlib import ExitStack
 from pathlib import Path
 from . import __version__
 from .assessment_history import compare_reports, contract_changes, previous_report, revision
-from .evidence import EvidenceStore, environment_identity, limit_tools, resolve_executable, source_snapshot, tool_identity, utcnow
+from .evidence import RUNNER_PROTOCOL, EvidenceStore, environment_identity, limit_tools, resolve_executable, source_snapshot, tool_identity, utcnow
 from .io import ClosureError, atomic_json, digest, file_digest, load_source, read_json, within
-from .models import Binding, Criterion, Datum, Study
-from .protocol import validate_report, StudyResult
+from .models import Binding, Criterion, Datum, Study, require_current_source
+from .protocol import ReviewRecord, StudyResult, validate_report
 from .project import Project, criteria, refs
 from .reporting import explain_report
 from .units import convert
@@ -132,7 +132,7 @@ class Engine:
         self.tools[identifier] = tool_identity(analysis.run, self.project.source_root(identifier))
         native_id = self.project.evidence_id(identifier)
         unit = self.project.unit_for(identifier)
-        identity = {"protocol": "closure-run/0.1", "engine": __version__, "analysis": native_id,
+        identity = {"protocol": RUNNER_PROTOCOL, "engine": __version__, "analysis": native_id,
                     "project": unit.name if unit else self.project.manifest.project,
                     "contract": self.project.native_contracts.get(identifier, analysis.model_dump()), "sources": self.sources[identifier], "environment": self.environment,
                     "executable": {"path": executable, "sha256": file_digest(executable)}, "tools": self.tools[identifier], "inputs": identities, "context": self.context}
@@ -252,6 +252,9 @@ class Engine:
 
     def _build(self, force=False, progress=None):
         self.executed = []
+        # Active reviews must be usable before execution. Read them again when
+        # sealing the report so it describes the decisions present at that time.
+        self._reviews_by_owner()
         def notify(event, **details):
             if progress:
                 progress({"event": event, "analysis": identifier, "index": index,
@@ -324,10 +327,12 @@ class Engine:
         if not path.exists():
             return {"status": "missing", "current_hash": current, "message": "Initial obligations need a recorded baseline review."}
         approved = read_json(path)
-        valid = approved.get("contract_hash") == current and bool(approved.get("reviewer")) and digest(approved.get("contract")) == current
+        valid = approved.get("schema") == "closure-baseline/0.2" and approved.get("contract_hash") == current and bool(approved.get("reviewer")) and digest(approved.get("contract")) == current
         message = "Obligations match the reviewed baseline."
         if not valid:
             message = "Acceptance definitions changed. A separate baseline review is required."
+            if approved.get("schema") != "closure-baseline/0.2":
+                message = "Review the obligations and run closure approve-baseline to record a 0.2 baseline."
             previous = approved.get("contract", {})
             for field in ("limit_calculations", "limit_artifacts"):
                 if previous.get(field) != contract.get(field):
@@ -336,16 +341,28 @@ class Engine:
                 "approved_hash": approved.get("contract_hash"), "reviewer": approved.get("reviewer"),
                 "message": message}
 
-    def _reviews(self, project=None):
-        project = project or self.project
-        reviews = []
-        for pattern in project.manifest.reviews:
-            within(project.root, pattern)
-            for path in project.root.glob(pattern):
-                review = read_json(path)
-                if review.get("reviewer") and review.get("reason"):
+    def _reviews_by_owner(self):
+        authorities = [(self.project.root, self.project.manifest)]
+        composition = self.project.composition
+        if composition:
+            scoped_owners = {self.project.unit_for(key).name for key in self.project.scope}
+            authorities.extend((unit.path.parent, unit.manifest) for unit in composition.units.values()
+                               if unit is not composition.root and (unit.owned or unit.name in scoped_owners))
+        by_owner = {}
+        for root, manifest in authorities:
+            reviews = []
+            for pattern in manifest.reviews:
+                within(root, pattern)
+                for path in sorted(root.glob(pattern)):
+                    review = read_json(within(root, path))
+                    if review.get("schema") == "closure-review/0.1":
+                        raise ClosureError("Archive the 0.1 review outside the active review paths. "
+                                           "Reassess its decision with closure review under 0.2.",
+                                           "MIGRATION_REQUIRED", str(path))
+                    ReviewRecord.model_validate(review)
                     reviews.append(review)
-        return sorted(reviews, key=lambda r: r.get("at", ""))
+            by_owner[manifest.project] = reviews
+        return by_owner
 
     def _criterion_support(self, criterion, index, policy):
         sources = [binding.ref for binding in refs(criterion)]
@@ -397,33 +414,24 @@ class Engine:
         if alternative:
             support_identity["selected_branches"] = selected
 
-        def review_signatures(assessment_policy):
+        def review_signature(assessment_policy):
             terms = assessment_policy.model_dump()
             terms["accepted_evidence"] = sorted(terms["accepted_evidence"])
-            evidence_identity = {**support_identity, "policy": terms}
             if applicable:
-                return (digest(evidence_identity),)
+                return digest({**support_identity, "policy": terms})
 
             # This decision concerns membership in the requirement's declared contexts.
             claim = identifier if self.project.composition else f"{self.project.manifest.project}::{identifier}"
-            applicability_hash = digest({"requirement": claim, "context": self.context,
-                                         "applies_to": sorted(set(requirement.applies_to)),
-                                         "configurations": sorted(set(requirement.configurations))})
-            # Older reviews hashed evidence. Only the pre-run identity can be
-            # reproduced independently of later executions. For an alternative,
-            # a parameter-only branch could already pass under the reviewing policy.
-            if alternative:
-                available = [self._criterion_support(c, i, assessment_policy) for i, c in enumerate(conditions)
-                             if all(b.ref in self.parameters for b in refs(c))]
-                evidence_identity["selected_branches"] = [b["index"] for b in _passing_alternative(available)]
-            return (applicability_hash, digest(evidence_identity))
+            return digest({"requirement": claim, "context": self.context,
+                           "applies_to": sorted(set(requirement.applies_to)),
+                           "configurations": sorted(set(requirement.configurations))})
 
-        signatures = review_signatures(policy)
+        signature = review_signature(policy)
         decisions = {}
-        candidates = [(self.project.manifest.project, signatures, r) for r in reviews if r.get("requirement") == identifier]
-        candidates.extend((authority, review_signatures(terms), r) for authority, terms, r in linked_reviews)
+        candidates = [(self.project.manifest.project, signature, r) for r in reviews if r.get("requirement") == identifier]
+        candidates.extend((authority, review_signature(terms), r) for authority, terms, r in linked_reviews)
         for authority, expected, entry in candidates:
-            if entry.get("context") == self.context and entry.get("assessment_hash") in expected:
+            if entry.get("context") == self.context and entry.get("assessment_hash") == expected:
                 if authority not in decisions or entry["at"] > decisions[authority]["at"]:
                     decisions[authority] = entry
         # One authority may revise its own review. Another authority cannot lift its rejection.
@@ -452,11 +460,12 @@ class Engine:
                 "status": status, "closed": closed, "gate_allowed": gate_allowed, "comparisons": comparisons,
                 "evidence": sorted({r for b in support for r in b["evidence"]}), "evidence_classes": sorted(classes),
                 "verification_mode": "any_of" if alternative else "all_of", "branches": branches, "selected_branches": selected,
-                "assessment_hash": signatures[0], "review": review, "dependencies": producers, "scoped": identifier in self.project.scope}
+                "assessment_hash": signature, "review": review, "dependencies": producers, "scoped": identifier in self.project.scope}
 
     def report(self):
+        reviews_by_owner = self._reviews_by_owner()
         baseline = self.baseline()
-        reviews = self._reviews()
+        reviews = reviews_by_owner[self.project.manifest.project]
         composition = self.project.composition
         baselines = {self.project.manifest.project: baseline}
         linked_reviews = {}
@@ -479,7 +488,7 @@ class Engine:
                     continue
                 if not required_authority:
                     continue
-                for review in self._reviews(local):
+                for review in reviews_by_owner[unit.name]:
                     key = review.get("requirement", "")
                     if key in local.requirements and (key in local.scope or local.source_root(key) == local.root):
                         identifier = key if local.composition else unit.qualify(key)
@@ -494,7 +503,7 @@ class Engine:
         analyses = [{"id": identifier, "state": self.states.get(identifier, "missing"), "execution_key": self.keys.get(identifier),
                      "record": self.records.get(identifier), "error": self.failures.get(identifier), "will_run": self.states.get(identifier) != "current"}
                     for identifier in self.work_order]
-        report = {"schema": "closure-report/0.1", "id": uuid.uuid4().hex, "created_at": utcnow(),
+        report = {"schema": "closure-report/0.2", "id": uuid.uuid4().hex, "created_at": utcnow(),
                 "project": self.project.manifest.project, "name": self.project.manifest.name or self.project.manifest.project,
                 "source_hash": self.project.source_hash, "context": self.context, "policy": self.project.manifest.policy.model_dump(),
                 "model": self.project.model_snapshot(),
@@ -509,7 +518,7 @@ class Engine:
                 approved = read_json(within(self.project.root, self.project.manifest.baseline))
                 report["baseline_changes"] = contract_changes(approved.get("contract", {}), self.project.obligation_contract())
             gates = composition.gates(assessments, baselines, self.project.requirements)
-            report.update(schema="closure-report/0.2", projects=composition.describe(), gates=gates, project_baselines=baselines,
+            report.update(projects=composition.describe(), gates=gates, project_baselines=baselines,
                           gate=gates[composition.root.name]["gate"])
         validate_report(report)
         return report
@@ -528,7 +537,7 @@ def approve_baseline(project, reviewer, reason):
     if not project.scope or not project.manifest.scenarios or not project.manifest.configurations:
         raise ClosureError("Cannot approve an empty closure scope", "EMPTY_SCOPE")
     contract = project.obligation_contract(approving=True)
-    record = {"schema": "closure-baseline/0.1", "contract": contract, "contract_hash": digest(contract), "reviewer": reviewer, "reason": reason, "at": utcnow()}
+    record = {"schema": "closure-baseline/0.2", "contract": contract, "contract_hash": digest(contract), "reviewer": reviewer, "reason": reason, "at": utcnow()}
     atomic_json(within(project.root, project.manifest.baseline), record)
     return record
 
@@ -546,7 +555,7 @@ def record_review(engine, identifier, decision, reviewer, reason):
         raise ClosureError("A review cannot override the policy's accepted evidence classes", "REVIEW_INVALID")
     if decision == "not_applicable" and assessment["applicability"] != "not_applicable":
         raise ClosureError("Applicable requirement cannot be reviewed as not applicable", "REVIEW_INVALID")
-    record = {"schema": "closure-review/0.1", "requirement": identifier, "context": engine.context, "decision": decision,
+    record = {"schema": "closure-review/0.2", "requirement": identifier, "context": engine.context, "decision": decision,
               "assessment_hash": assessment["assessment_hash"], "reviewer": reviewer, "reason": reason, "at": utcnow()}
     atomic_json(engine.project.root / "reviews" / "acceptance" / f"{uuid.uuid4().hex}.json", record)
     return record
@@ -554,7 +563,10 @@ def record_review(engine, identifier, decision, reviewer, reason):
 
 def sweep(project, study_path, trusted=False, progress=None):
     project = project if isinstance(project, Project) else Project(project)
-    study = Study.model_validate(load_source(within(project.root, study_path)))
+    path = within(project.root, study_path)
+    document = load_source(path)
+    require_current_source(document, path)
+    study = Study.model_validate(document)
     points = study.points or [dict(zip(study.grid, point)) for point in itertools.product(*study.grid.values())]
     total = len(points) * len(study.scenarios) * len(study.configurations)
     if not total or total > 10000:
@@ -566,7 +578,7 @@ def sweep(project, study_path, trusted=False, progress=None):
             for configuration in study.configurations:
                 engine = Engine(project, scenario, configuration, point, point_id)
                 reports.append(engine.build(trusted=trusted, progress=progress))
-    result = {"schema": "closure-study/0.1", "study": study.study, "expected": total, "completed": len(reports),
+    result = {"schema": "closure-study/0.2", "study": study.study, "expected": total, "completed": len(reports),
               "passed": sum(r["gate"] for r in reports), "failed": sum(not r["gate"] for r in reports), "reports": reports,
               "complete_evidence": all(all(a["state"] == "current" for a in r["analyses"]) for r in reports)}
     StudyResult.model_validate(result)

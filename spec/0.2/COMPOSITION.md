@@ -1,6 +1,6 @@
 # Local project composition
 
-The `closure/0.2` manifest composes local projects. Modules, ports and runner requests use the 0.1 contracts. Existing 0.1 manifests continue to select single projects. The new manifest and report schemas are [composed-project](../../schema/composed-project.schema.json) and [composed-report](../../schema/composed-report.schema.json).
+The `closure/0.2` manifest composes local projects. Modules, ports and runner requests follow the [0.2 core specification](SPECIFICATION.md). A standalone manifest uses `kind: standalone` and local symbol names. The new manifest and report schemas are [composed-project](../../schema/composed-project.schema.json) and [composed-report](../../schema/composed-report.schema.json).
 
 ## Author a root
 

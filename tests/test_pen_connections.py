@@ -27,7 +27,7 @@ def run_analysis(tmp_path, identifier, overrides=None, upstream=None):
     inputs.update(overrides or {})
     output=tmp_path/identifier
     output.mkdir(exist_ok=True)
-    request={'protocol':'closure-run/0.1','invocation_id':'test','inputs':inputs,
+    request={'protocol':'closure-run/0.2','invocation_id':'test','inputs':inputs,
              'settings':analysis.settings,'output_dir':str(output)}
     process=subprocess.run([sys.executable,str(ROOT/analysis.run.argv[1])],
         input=json.dumps(request),capture_output=True,text=True,encoding='utf-8',check=True)

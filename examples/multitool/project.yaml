@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: blender-openfoam
 name: Cavity / connected tools
 description: A real Blender file supplies geometry to Python and an OpenFOAM transient flow case.

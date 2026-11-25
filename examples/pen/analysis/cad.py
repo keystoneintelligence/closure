@@ -131,7 +131,7 @@ with contextlib.redirect_stdout(sys.stderr):
     motion=json.loads(__import__('pathlib').Path(v["motion"]).read_text())
     animation=animation_metadata(motion,v["spring_installed"],spring_bottom)
     stock={"aluminum_mm3":math.pi*(diameter/2)**2*(length+nose_h+v["thread_engagement"]+v["cap_length"]+v["stock_allowance"])}
-    assembly_data={"schema":"closure-assembly/0.1","name":"Click pen","length_unit":"mm","model_output":"model",
+    assembly_data={"schema":"closure-assembly/0.2","name":"Click pen","length_unit":"mm","model_up_axis":"z","model_output":"model",
         "parts":metadata,"stock":stock,"cam_datums":cam_datums,**animation,
         "notes":["Threads are represented by mating envelopes; no released thread specification is supplied.",
                  "Motion follows rigid quasi-static cam contact envelopes. Friction is screened separately; dynamics, wear and lifetime require physical evidence. Spring rendering uses illustrative axial scaling.",

@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .io import ClosureError
+
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, allow_inf_nan=False)
@@ -123,7 +125,7 @@ class Requirement(Contract):
 
 
 class Module(Contract):
-    schema_version: Literal["closure/0.1"] = Field(alias="schema")
+    schema_version: Literal["closure/0.2"] = Field(alias="schema")
     module: str
     name: str = ""
     owner: str
@@ -148,8 +150,8 @@ class Policy(Contract):
     description: str = "Analytical concept assessment within declared model validity."
 
 
-class Manifest(Contract):
-    schema_version: Literal["closure/0.1"] = Field(alias="schema")
+class ProjectManifest(Contract):
+    schema_version: Literal["closure/0.2"] = Field(alias="schema")
     project: str
     name: str = ""
     description: str = ""
@@ -160,6 +162,10 @@ class Manifest(Contract):
     scope: list[str] = Field(default_factory=lambda: ["*"])
     baseline: str = "reviews/baseline.json"
     reviews: list[str] = Field(default_factory=lambda: ["reviews/acceptance/*.json"])
+
+
+class Manifest(ProjectManifest):
+    kind: Literal["standalone"]
 
 
 class ChildProject(Contract):
@@ -173,8 +179,7 @@ class ProjectImport(Contract):
     port: Port | None = None
 
 
-class CompositionManifest(Manifest):
-    schema_version: Literal["closure/0.2"] = Field(alias="schema")
+class CompositionManifest(ProjectManifest):
     children: dict[str, ChildProject] = Field(default_factory=dict)
     imports: dict[str, ProjectImport] = Field(default_factory=dict)
     exports: dict[str, str] = Field(default_factory=dict)
@@ -182,7 +187,7 @@ class CompositionManifest(Manifest):
 
 
 class Study(Contract):
-    schema_version: Literal["closure/0.1"] = Field(alias="schema")
+    schema_version: Literal["closure/0.2"] = Field(alias="schema")
     study: str
     scenarios: list[str] = Field(default_factory=lambda: ["nominal"])
     configurations: list[str] = Field(default_factory=lambda: ["default"])
@@ -196,3 +201,18 @@ class Study(Contract):
         if any(not values for values in self.grid.values()):
             raise ValueError("study axes cannot be empty")
         return self
+
+
+def manifest_model(document):
+    # Unmarked 0.2 manifests retain composed scope and qualified identifiers,
+    # including manifests that currently have no children or imports.
+    return Manifest if "kind" in document else CompositionManifest
+
+
+def require_current_source(document, location=""):
+    if document.get("schema") == "closure/0.1":
+        instruction = "Use schema: closure/0.2"
+        if "project" in document:
+            instruction += " and add kind: standalone to the project manifest"
+        raise ClosureError(f"Migrate this 0.1 source before using it. {instruction}.",
+                           "SOURCE_VERSION", str(location))

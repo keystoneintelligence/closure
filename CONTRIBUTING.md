@@ -1,6 +1,6 @@
 # Contributing to Closure
 
-The candidate distribution is `closure-se==0.2.0a1`. Standalone manifests and modules use the 0.1 core contracts. Composed manifests use `closure/0.2`. Both project formats use the `closure-run/0.1` runner protocol. The bundled viewer and backend use the `closure-viewer/0.2` HTTP API. Before changing a contract, consult the [core specification](spec/0.1/SPECIFICATION.md), [composition specification](spec/0.2/COMPOSITION.md), [CLI guide](docs/CLI_GUIDE.md), and [compatibility policy](docs/COMPATIBILITY.md).
+The candidate distribution is `closure-se==0.2.0a1`. Standalone and composed manifests, modules and studies use the 0.2 core contracts. Both project formats use the `closure-run/0.2` runner protocol. The bundled viewer and backend use the `closure-viewer/0.2` HTTP API. Before changing a contract, consult the [core specification](spec/0.2/SPECIFICATION.md), [composition specification](spec/0.2/COMPOSITION.md), [CLI guide](docs/CLI_GUIDE.md), and [compatibility policy](docs/COMPATIBILITY.md).
 
 Use a Python 3.10 or 3.12 virtual environment and Node 22 or newer:
 

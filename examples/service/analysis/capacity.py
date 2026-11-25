@@ -15,7 +15,7 @@ with detail.open("w", newline="", encoding="utf-8") as stream:
     writer = csv.writer(stream)
     writer.writerow(["arrival_per_s", "workers", "capacity_per_s", "headroom_percent"])
     writer.writerow([v["arrival"], v["workers"], throughput, 100-utilization])
-json.dump({"protocol": "closure-run/0.1", "invocation_id": request["invocation_id"], "outputs": {
+json.dump({"protocol": "closure-run/0.2", "invocation_id": request["invocation_id"], "outputs": {
     "throughput": {"value": throughput, "unit": "1/s"},
     "headroom": {"value": 100-utilization, "unit": "percent"},
     "utilization": {"value": utilization, "unit": "percent"},

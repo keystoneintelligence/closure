@@ -185,8 +185,8 @@ def test_forced_child_run_reopens_parent_even_when_output_matches(assembly):
     assert verify(assembly)["gate"]
 
 
-def test_legacy_child_and_intermediate_review_authorities(assembly):
-    # A 0.1 child has local IDs in sealed records. Composing it must preserve those records.
+def test_standalone_child_and_intermediate_review_authorities(assembly):
+    # A standalone child has local IDs in sealed records. Composing it must preserve those records.
     legacy = assembly / "electronics/legacy"
     shutil.copytree(Path(__file__).parents[1] / "src/closure/templates/power", legacy)
     edit_yaml(legacy / "project.yaml", lambda d: d.update(project="legacy"))

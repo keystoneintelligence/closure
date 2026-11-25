@@ -17,7 +17,7 @@ spring_guide_clearance = v["spring_inner"]-v["guide_diameter"]-2*v["machining_to
 radial_clearance = v["barrel_inner"]-v["sleeve_diameter"]-2*v["machining_tolerance"]
 motion = json.loads(Path(v["motion"]).read_text())
 valid = v["motion_valid"] and minimum_slope>mu and release_clearance>0 and return_torque>0
-(out/"mechanism_cycle.json").write_text(json.dumps({"schema":"closure-motion-screen/0.1", "ends":motion["ends"],
+(out/"mechanism_cycle.json").write_text(json.dumps({"schema":"closure-motion-screen/0.2", "ends":motion["ends"],
     "cycle_valid":valid, "minimum_slope":minimum_slope,
     "assumptions":["Friction coefficient bounded by the declared input", "Rigid quasi-static contact envelopes and lumped guide drag", "No impact, creep, or wear model"]},indent=2))
 write(request, {"push_force":q(push_force,"N"), "return_torque":q(return_torque,"N*mm"),

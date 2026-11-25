@@ -44,7 +44,7 @@ def explain_report(report, identifier):
         for parent in parents:
             trace(parent, [node, *suffix], visited | {node})
     trace(identifier, [], set())
-    owner = identifier.split("::", 1)[0] if report["schema"] == "closure-report/0.2" else report["project"]
+    owner = identifier.split("::", 1)[0] if "projects" in report else report["project"]
     return {"requirement": requirement, "paths": paths, "context": report["context"],
             "baseline_project": owner, "baseline": _owner_baseline(report, owner)}
 
@@ -93,7 +93,7 @@ def export_report(engine, destination, report_id=None):
                 artifacts.append({"id": identifier, "role": role, "file": relative.as_posix(),
                                   "sha256": value["sha256"], "media_type": value.get("media_type"), "run": record["id"]})
         atomic_json(stage / "report.json", report)
-        atomic_json(stage / "artifacts.json", {"schema": "closure-export/0.1", "report": report["id"],
+        atomic_json(stage / "artifacts.json", {"schema": "closure-export/0.2", "report": report["id"],
                     "mode": "historical" if report_id else "current_plan", "report_hash": report.get("report_hash"), "artifacts": artifacts})
         esc = lambda x: html.escape(str(x))
         rows = []

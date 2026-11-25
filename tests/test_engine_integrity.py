@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from closure.editing import project_lock
 from closure.engine import Engine, approve_baseline, record_review
-from closure.io import ClosureError, digest, file_digest
+from closure.io import ClosureError, file_digest
 from closure.project import Project
 from conftest import edit_yaml, runner
 from test_rfc_acceptance import artifact_analysis, assessment, input_power
@@ -104,48 +104,30 @@ def test_na_review_tracks_applicability_declarations_and_context(project_dir):
     assert changed["assessment_hash"] != review["assessment_hash"]
 
 
-@pytest.mark.parametrize("reviewed_before_run", [True, False])
-def test_legacy_na_review_only_reuses_reproducible_applicability(project_dir, reviewed_before_run):
-    edit_yaml(project_dir / "project.yaml", lambda d: d.update(scenarios={"nominal": {}, "high_load": {}}))
-    def add_high_load_requirement(d):
-        d["requirements"]["PWR-002"] = {
-            "text": "Power demand under high load shall remain within the allocation.", "applies_to": ["high_load"],
-            "verify": {"any_of": [{"actual": {"ref": ref}, "op": "lte", "limit": {"value": 200, "unit": "W"}}
-                                  for ref in ("power.budget.total", "power.base_load")]}}
-    edit_yaml(project_dir / "model/power.yaml", add_high_load_requirement)
-    approve_baseline(project_dir, "reviewer", "Review the high-load power allocation")
+def test_active_legacy_review_requires_archiving_and_a_fresh_decision(project_dir):
     engine = Engine(project_dir)
-    key = "power.PWR-002"
-    policy = engine.project.manifest.policy.model_dump()
-    policy["accepted_evidence"] = sorted(policy["accepted_evidence"])
-    run_hash = None
-    if not reviewed_before_run:
-        run_hash = engine.verify(trusted=True)["analyses"][0]["record"]["record_hash"]
-    legacy_hash = digest({"requirement": engine.project.requirements[key].model_dump(),
-                          "context": engine.context, "policy": policy,
-                          "records": {"power.budget": run_hash},
-                          "inputs": {"power.base_load": engine.parameters["power.base_load"].model_dump()},
-                          "selected_branches": [1 if reviewed_before_run else 0]})
-    review = {"schema": "closure-review/0.1", "requirement": key, "context": engine.context,
-              "decision": "not_applicable", "assessment_hash": legacy_hash, "reviewer": "Power reviewer",
-              "reason": "The high-load allocation applies only to the high-load scenario", "at": "2025-01-01T00:00:00Z"}
-    folder = project_dir / "reviews/acceptance"
-    folder.mkdir(exist_ok=True)
-    (folder / "high_load.json").write_text(json.dumps(review), encoding="utf-8")
+    key = "power.PWR-001"
+    old = record_review(engine, key, "rejected", "Power reviewer", "Check the load estimate")
+    old["schema"] = "closure-review/0.1"
+    path = next((project_dir / "reviews/acceptance").glob("*.json"))
+    path.write_text(json.dumps(old), encoding="utf-8")
 
-    plan = engine.plan()
-    result = engine.verify(trusted=True, force=True)
-    assert result["executed"] == ["power.budget"]
-    for report in (plan, result):
-        allocation = next(row for row in report["requirements"] if row["id"] == key)
-        assert allocation["status"] == ("NOT_APPLICABLE" if reviewed_before_run else "REVIEW")
-        assert allocation["review"] == (review if reviewed_before_run else None)
-        assert allocation["evidence"] == [] and allocation["comparisons"] == []
-    assert result["gate"] is reviewed_before_run
+    for assess in (engine.plan, lambda: engine.verify(trusted=True)):
+        with pytest.raises(ClosureError, match="closure review") as error:
+            assess()
+        assert error.value.code == "MIGRATION_REQUIRED" and error.value.location == str(path)
+    assert not list((engine.store.root / "runs").glob("*.json"))
+    assert json.loads(path.read_text(encoding="utf-8")) == old
+
+    path.rename(project_dir / "reviews/previous-decision.json")
+    engine.verify(trusted=True)
+    new = record_review(engine, key, "accepted", "Power reviewer", "Checked the new power result")
+    assert new["schema"] == "closure-review/0.2"
+    assert assessment(engine.plan())["review"] == new
 
 
 def test_malformed_duplicate_json_outputs_fail(project_dir):
-    runner(project_dir, "print('{\"protocol\":\"closure-run/0.1\",\"invocation_id\":' + json.dumps(r['invocation_id']) + ',\"outputs\":{\"total\":{\"value\":999,\"value\":180,\"unit\":\"W\"}}}')")
+    runner(project_dir, "print('{\"protocol\":\"closure-run/0.2\",\"invocation_id\":' + json.dumps(r['invocation_id']) + ',\"outputs\":{\"total\":{\"value\":999,\"value\":180,\"unit\":\"W\"}}}')")
     result = Engine(project_dir).build(trusted=True)
     assert not result["gate"]
     assert "Duplicate JSON key" in result["analyses"][0]["error"]["message"]

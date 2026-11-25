@@ -139,7 +139,7 @@ def create_server(project, port=8765, workspace=None, trusted=False):
             try:
                 if parsed.path == '/api/version':
                     return self.respond({"api":VIEWER_API,"implementation":__version__,
-                                         "source":"closure/0.1","supported_sources":["closure/0.1","closure/0.2"],"runner":"closure-run/0.1",
+                                         "source":"closure/0.2","supported_sources":["closure/0.2"],"runner":"closure-run/0.2",
                                          "execution":"trusted-local","trusted":app.trusted})
                 if parsed.path=="/api/project":
                     return self.respond(app.snapshot(query.get("scenario",[None])[0],query.get("configuration",[None])[0],query.get("report",[None])[0]))

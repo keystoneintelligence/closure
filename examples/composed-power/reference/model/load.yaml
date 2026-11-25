@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: profile
 owner: Test Engineering
 parameters: {reference: {value: 26, unit: W}}

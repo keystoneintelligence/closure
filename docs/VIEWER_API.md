@@ -19,7 +19,7 @@ Every JSON response carries `X-Closure-API: closure-viewer/0.2`. The bundled cli
 | POST `/api/verify` | project, optional scenario/configuration/force | Saved assessment, including open gates and failed analyses |
 | POST `/api/build` | same as verify | Compatibility alias |
 
-`GET /api/version` lists `closure/0.1` and `closure/0.2` in `supported_sources`. Its `source` field identifies the 0.1 core format, and `runner` is `closure-run/0.1` for both. A composed report includes `projects` and `gates`. Verification also records the source revision and assessment comparison.
+`GET /api/version` lists `closure/0.2` in `supported_sources` for live projects. Its `source` is `closure/0.2` and its `runner` is `closure-run/0.2`. Saved 0.1 reports remain available by ID. A composed report includes `projects` and `gates`. Verification also records the source revision and assessment comparison.
 
 POST bodies are JSON objects limited to 1 MB and require the session's `X-Closure-Token` from a project snapshot. Host must name localhost or 127.0.0.1 with the actual port. If present, Origin must identify a permitted local HTTP origin on that port. Use `path` to select a project with `/api/open`. Parameter edits and verification require a matching `project` value, return HTTP 409 for a stale selection, and reject a historical `report` ID. Verify accepts a JSON boolean for `force` and requires a server started with `--trusted`.
 

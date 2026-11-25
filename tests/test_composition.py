@@ -313,7 +313,7 @@ def test_artifact_bytes_from_shared_project(assembly):
     path = assembly / "reference/project.yaml"
     path.write_text(path.read_text().replace("profile.evaluate.power", "profile.dataset"))
     path = assembly / "reference/model/load.yaml"
-    path.write_text("schema: closure/0.1\nmodule: profile\nowner: Test Engineering\n"
+    path.write_text("schema: closure/0.2\nmodule: profile\nowner: Test Engineering\n"
                     "parameters: {dataset: {type: artifact, path: load.txt}}\n")
     dataset = assembly / "reference/load.txt"
     dataset.write_text("26")

@@ -100,7 +100,7 @@ class CamProfile:
             ends.append({"click": click + 1, "state": state, "rotor_mm": q,
                          "button_mm": button, "rotor_deg": angle - self.initial_angle,
                          "sample_start": start, "sample_end": len(samples) - 1})
-        return {"schema": "closure-cam-motion/0.1", "samples": samples, "ends": ends,
+        return {"schema": "closure-cam-motion/0.2", "samples": samples, "ends": ends,
                 "initial_angle_deg": self.initial_angle, "reference_separation_mm": self.reference,
                 "max_rotor_stroke_mm": max(sample["rotor_mm"] for sample in samples),
                 "crown_angle_deg": math.degrees(math.atan(self.crown_slope)),

@@ -45,9 +45,14 @@ def check(publication=False, release_record=None):
     if f'version = "{__version__}"' not in (ROOT/'pyproject.toml').read_text(): errors.append('Python metadata version differs')
     if frontend['version'] != metadata['viewer_version'] or lock['version'] != frontend['version']: errors.append('Viewer versions differ')
     if VIEWER_API != metadata['viewer_api']: errors.append('Viewer API version differs')
-    for name,schema in schemas().items():
+    current_schemas = schemas()
+    source = current_schemas['module']['properties']['schema']['const']
+    runner = current_schemas['runner-request']['properties']['protocol']['const']
+    if (source, runner) != (metadata['specification_version'], metadata['runner_protocol']):
+        errors.append('Core source or runner version differs from release manifest')
+    for name,schema in current_schemas.items():
         if json.loads((ROOT/'schema'/f'{name}.schema.json').read_text()) != schema: errors.append(f'Schema drift: {name}')
-    for path in ('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md','README.md','CHANGELOG.md','SECURITY.md','CONTRIBUTING.md','spec/0.1/SPECIFICATION.md','docs/QUICKSTART.md'):
+    for path in ('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md','README.md','CHANGELOG.md','SECURITY.md','CONTRIBUTING.md','spec/0.2/SPECIFICATION.md','spec/0.2/COMPOSITION.md','docs/QUICKSTART.md'):
         if not (ROOT/path).is_file(): errors.append(f'Missing release file: {path}')
     if hashlib.sha256((ROOT/'LICENSE').read_bytes()).hexdigest() != 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30': errors.append('Official Apache license text changed')
     protected={'Closure_RFC_0001.md':'721904a15ab605dbaeb5ba0c00be5cb4972baf9338e50935d9cce8f2ede29a5e','MTP.md':'d8c4969c5f1f1e486e0787514821a705a305152af920c535ea3409ce82710b07','NORTH_STAR.md':'dfddd44194f7861e268660f608b14ed4f078791640033443115242fea182c4c4'}

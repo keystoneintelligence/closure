@@ -14,7 +14,7 @@ record = next(a["record"] for a in report["analyses"] if a["id"] == "manufacturi
 source = (project / "analysis/cad.py").read_text().split('    assembly=cq.Assembly')[0]
 sys.path.insert(0, str(project / "analysis"))
 with tempfile.TemporaryDirectory() as directory:
-    request = {"protocol": "closure-run/0.1", "invocation_id": "geometry-audit", "inputs": record["inputs"], "output_dir": directory}
+    request = {"protocol": "closure-run/0.2", "invocation_id": "geometry-audit", "inputs": record["inputs"], "output_dir": directory}
     sys.stdin = io.StringIO(json.dumps(request))
     context = {}
     exec(compile(source, str(project / "analysis/cad.py"), "exec"), context)

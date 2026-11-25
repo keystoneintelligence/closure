@@ -96,7 +96,7 @@ def test_json_project_round_trip_and_viewer_discovery(service):
         assert report["gate"]
     finally:
         server.shutdown(); server.server_close(); thread.join(5)
-    (service/"project.yaml").write_text("schema: closure/0.1\n")
+    (service/"project.yaml").write_text("schema: closure/0.2\n")
     with pytest.raises(ClosureError, match="Multiple project manifests"):
         Project(service)
     assert Project(service/"project.json").manifest.project == "service-capacity"

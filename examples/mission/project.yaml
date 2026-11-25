@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: orbital-energy
 name: Orbital mission / eclipse energy
 description: Synthetic orbit, payload and power teams share evidence with mission operations.

@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: spring
 name: Return spring
 owner: Spring engineering

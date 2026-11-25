@@ -1,4 +1,4 @@
-schema: closure/0.1
+schema: closure/0.2
 module: power
 name: Electrical power
 owner: Power engineering

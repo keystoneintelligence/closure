@@ -64,7 +64,7 @@ with zipfile.ZipFile(output / "cavity-case.zip", "w", zipfile.ZIP_DEFLATED) as a
 q = lambda value, unit: {"value": value, "unit": unit}
 s = lambda value: {"value": value}
 converged = all(map(math.isfinite, [*courant, *residuals, *continuity])) and max(residuals) < 1e-5
-response = {"protocol": "closure-run/0.1", "invocation_id": request["invocation_id"], "converged": converged,
+response = {"protocol": "closure-run/0.2", "invocation_id": request["invocation_id"], "converged": converged,
             "residuals": {"max_linear_final": max(residuals), "continuity": continuity[-1]}, "outputs": {
                 "mesh_valid": s(True), "cells": s(len(vectors)), "final_time": q(float(times[-1]), "s"),
                 "max_courant": s(max(courant)), "continuity_error": s(abs(continuity[-1])),

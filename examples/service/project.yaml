@@ -1,4 +1,5 @@
-schema: closure/0.1
+schema: closure/0.2
+kind: standalone
 project: service-capacity
 name: Service / capacity and energy
 description: Workload, platform and operations teams check throughput headroom and an energy budget.
